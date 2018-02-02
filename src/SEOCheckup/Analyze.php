@@ -192,7 +192,7 @@ class Analyze
     }
 
     /**
-     * Determine character set from headers
+     * Determines character set from headers
      *
      * @TODO: Use Regex instead of explode
      * @return array
@@ -208,6 +208,44 @@ class Analyze
                 $output = explode('=', explode(';',$header[0])[1])[1];
             }
         }
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Calculates code / content percentage
+     *
+     * @return array
+     */
+    public function CodeContent()
+    {
+        $page_size = mb_strlen($this->data['content'], 'utf8');
+        $dom       = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $script    = $dom->getElementsByTagName('script');
+        $remove    = array();
+
+        foreach ($script as $item)
+        {
+            $remove[] = $item;
+        }
+
+        foreach ($remove as $item)
+        {
+            $item->parentNode->removeChild($item);
+        }
+
+        $page         = $dom->saveHTML();
+        $content_size = mb_strlen(strip_tags($page), 'utf8');
+        $rate         = (round($content_size / $page_size * 100));
+        $output       = array(
+            'page_size'     => $page_size,
+            'code_size'     => ($page_size - $content_size),
+            'content_size'  => $content_size,
+            'content'       => $this->helpers->Whitespace(strip_tags($page)),
+            'percentage'    => "$rate%"
+        );
+
         return $this->Output($output, __FUNCTION__);
     }
 }
