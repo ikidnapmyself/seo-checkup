@@ -11,7 +11,10 @@ use GuzzleHttp\Client;
 class Analyze
 {
 
-    private $guzzle;
+    /**
+     * @var Tools $tools
+     */
+    private $tools;
 
     /**
      * @var string $content
@@ -20,7 +23,7 @@ class Analyze
 
     public function __construct()
     {
-        $this->guzzle = new Client;
+        $this->tools  = new Tools;
     }
 
     /**
@@ -31,7 +34,8 @@ class Analyze
      */
     public function FormURL($url)
     {
-        $response = $this->guzzle->get($url);
+        $guzzle   = new Client;
+        $response = $guzzle->get($url);
         $response = $response->getBody()->getContents();
 
         $this->content = $response;
