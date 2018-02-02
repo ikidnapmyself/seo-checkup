@@ -633,6 +633,30 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Gets inbound links
+     *
+     * @return array
+     */
+    public function MetaTitle()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+        $tags   = $dom->getElementsByTagName('title');
+        $output = '';
+        foreach ($tags as $tag)
+        {
+            if(isset($tag->nodeValue) && strlen($tag->nodeValue) > 0)
+            {
+                $output = $tag->nodeValue;
+            }
+            break;
+        }
+
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
