@@ -349,4 +349,33 @@ class Analyze extends PreRequirements
 
         return $this->Output($link, __FUNCTION__);
     }
+
+    /**
+     * Checks if there is a frame in the page
+     *
+     * @return array
+     */
+    public function Frameset()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('frameset');
+        $output = ['frameset' => [], 'frame' => []];
+        foreach ($tags as $tag)
+        {
+            $output['frameset'][] = null;
+        }
+
+        $tags   = $dom->getElementsByTagName('frame');
+        foreach ($tags as $tag)
+        {
+            $output['frame'][] = null;
+        }
+
+        return $this->Output([
+            'frameset' => count($output['frameset']),
+            'frame'    => count($output['frame'])
+        ], __FUNCTION__);
+    }
 }
