@@ -134,4 +134,38 @@ class Analyze
             'scanned' => $scan
         ], __FUNCTION__);
     }
+
+    /**
+     * Checks header parameters if there is something about cache
+     *
+     * @return array
+     */
+    public function Cache()
+    {
+        $output = ['headers' => [], 'html' => []];
+
+        foreach ($this->data['headers'] as $header)
+        {
+            foreach ($header as $item)
+            {
+                if(strpos(mb_strtolower($item),'cache') !== false)
+                {
+                    $output['headers'][] = $item;
+                }
+            }
+        }
+
+        $dom   = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+        $xpath = $this->DOMXPath();
+
+        foreach ($xpath->query('//comment()') as $comment)
+        {
+            if(strpos(mb_strtolower($comment->textContent),'cache') !== false)
+            {
+                $output['html'][] = '<!-- '.trim($comment->textContent).' //-->';
+            }
+        }
+        return $this->Output($output, __FUNCTION__);
+    }
 }
