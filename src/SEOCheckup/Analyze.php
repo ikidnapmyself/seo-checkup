@@ -378,4 +378,58 @@ class Analyze extends PreRequirements
             'frame'    => count($output['frame'])
         ], __FUNCTION__);
     }
+
+    /**
+     * Finds Google Analytics code
+     *
+     * @return array
+     */
+    public function GoogleAnalytics()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $script = '';
+
+        $tags   = $dom->getElementsByTagName('script');
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('src'))
+            {
+                if (0 === strpos($tag->getAttribute('src'), '//'))
+                {
+                    $href     = $this->data['parsed_url']['scheme'] . ':'.$tag->getAttribute('src');
+                } else if (0 !== strpos($tag->getAttribute('src'), 'http'))
+                {
+                    $path     = '/' . ltrim($tag->getAttribute('src'), '/');
+                    $href     = $this->data['parsed_url']['scheme'] . '://';
+
+                    if (isset($this->data['parsed_url']['user']) && isset($this->data['parsed_url']['pass']))
+                    {
+                        $href .= $this->data['parsed_url']['user'] . ':' . $this->data['parsed_url']['pass'] . '@';
+                    }
+
+                    $href     .= $this->data['parsed_url']['host'];
+
+                    if (isset($this->data['parsed_url']['port']))
+                    {
+                        $href .= ':' . $this->data['parsed_url']['port'];
+                    }
+                    $href    .= $path;
+                } else {
+                    $href     = $tag->getAttribute('src');
+                }
+
+                $script .= $this->Request($href)->getBody()->getContents();
+            } else {
+                $script .= $tag->nodeValue;
+            }
+        }
+
+        $ua_regex        = "/UA-[0-9]{5,}-[0-9]{1,}/";
+
+        preg_match_all($ua_regex, $script, $ua_id);
+
+        return $this->Output($ua_id[0][0], __FUNCTION__);
+    }
 }
