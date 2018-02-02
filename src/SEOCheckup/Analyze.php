@@ -472,4 +472,20 @@ class Analyze extends PreRequirements
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Checks HTML page compression
+     *
+     * @return array
+     */
+    public function PageCompression()
+    {
+        $output['actual']     = round(strlen($this->data['content']) / 1024,2);
+        $output['possible']   = gzcompress($this->data['content'], 9);
+        $output['possible']   = round(strlen($output['possible']) / 1024,2);
+        $output['percentage'] = round((($output['possible'] * 100) / $output['actual']),2);
+        $output['difference'] = round($output['actual'] - $output['possible'],2);
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
