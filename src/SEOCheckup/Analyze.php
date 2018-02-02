@@ -12,19 +12,10 @@ class Analyze
 {
 
     /**
-     * @var Tools $tools
+     * @var array $data
      */
-    private $tools;
+    private $data;
 
-    /**
-     * @var string $content
-     */
-    private $content;
-
-    public function __construct()
-    {
-        $this->tools  = new Tools;
-    }
 
     /**
      * Initialize from URL via Guzzle
@@ -32,37 +23,37 @@ class Analyze
      * @param string $url
      * @return $this
      */
-    public function FormURL($url)
+    public function __construct($url)
     {
         $guzzle   = new Client;
         $response = $guzzle->get($url);
-        $response = $response->getBody()->getContents();
 
-        $this->content = $response;
-        return $this;
-    }
-
-    /**
-     * Initialize with file content
-     *
-     * @param string $html
-     * @return $this
-     */
-    public function FromHTML($html)
-    {
-        $this->content = $html;
+        $this->data = [
+            'url'     => $url,
+            'status'  => $response->getStatusCode(),
+            'headers' => $response->getHeaders(),
+            'content' => $response->getBody()->getContents()
+        ];
 
         return $this;
     }
 
     /**
-     * It could be useful if you try to grab content from URL
+     * Standardizes output
      *
-     * @return string
+     * @param $return
+     * @return array
      */
-    public function GetContent()
+    private function Output($return)
     {
-        return $this->content;
+        return [
+            'url'       => $this->data['url'],
+            'status'    => $this->data['status'],
+            'headers'   => $this->data['headers'],
+            'service'   => preg_replace("([A-Z])", " $0", __FUNCTION__),
+            'time'      => time(),
+            'data'      => $return
+        ];
     }
 
 }
