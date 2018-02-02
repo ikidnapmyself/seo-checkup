@@ -1,0 +1,29 @@
+{
+    "name": "frnxstd/seo-checkup",
+    "description": "PHP Toolbox for SEO Checkup",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Burak",
+            "email": "burak@myself.com"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "path",
+            "url": "src/SEOCheckup",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "require": {
+        "php": ">=5.3",
+        "guzzlehttp/guzzle": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "SEOCheckup\\": "src/SEOCheckup/"
+        }
+    }
+}
