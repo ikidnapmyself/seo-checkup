@@ -501,14 +501,17 @@ class Analyze extends PreRequirements
 
         foreach($tags as $item)
         {
+            $src      = $item->getAttribute('src');
+            $alt      = $item->getAttribute('alt');
+
             $images[] = array(
-                'src' => $item->getAttribute('src'),
-                'alt' => $item->getAttribute('alt')
+                'src' => $src,
+                'alt' => $alt
             );
 
-            if($item->getAttribute('alt') == '')
+            if($alt == '')
             {
-                $link = $item->getAttribute('src');
+                $link = $src;
 
                 $errors[] = $link;
             }
@@ -529,6 +532,8 @@ class Analyze extends PreRequirements
      */
     public function PageCompression()
     {
+        $output               = array();
+
         $output['actual']     = round(strlen($this->data['content']) / 1024,2);
         $output['possible']   = gzcompress($this->data['content'], 9);
         $output['possible']   = round(strlen($output['possible']) / 1024,2);
