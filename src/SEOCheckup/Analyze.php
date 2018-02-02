@@ -486,6 +486,43 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Checks empty image alts
+     *
+     * @return array
+     */
+    public function ImageAlt()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags         = $dom->getElementsByTagName('img');
+        $images       = array();
+        $errors       = array();
+
+        foreach($tags as $item)
+        {
+            $images[] = array(
+                'src' => $item->getAttribute('src'),
+                'alt' => $item->getAttribute('alt')
+            );
+
+            if($item->getAttribute('alt') == '')
+            {
+                $link = $item->getAttribute('src');
+
+                $errors[] = $link;
+            }
+        }
+
+        $output       = array(
+            'images'        => $images,
+            'without_alt'   => $errors
+        );
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
