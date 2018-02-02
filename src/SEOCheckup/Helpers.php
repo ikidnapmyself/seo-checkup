@@ -18,23 +18,21 @@ class Helpers
     }
 
     /**
-     * Get link attributes in a page
+     * Get links in a page
      *
      * @param \DOMDocument $dom
-     * @param string $tag
-     * @param string $attr
      * @return array
      */
-    public function GetAttributes($dom, $tag = 'a', $attr = 'href')
+    public function GetLinks($dom)
     {
-        $tags  = $dom->getElementsByTagName($tag);
+        $tags  = $dom->getElementsByTagName('a');
         $links = array();
 
         if($tags->length)
         {
             foreach($tags as $item)
             {
-                $link = $item->getAttribute($attr);
+                $link = $item->getAttribute('href');
 
                 if($link != '' && strpos($link,'#') !== 0 && strpos(strtolower($link),'javascript:') !== 0)
                 {
@@ -69,6 +67,30 @@ class Helpers
 
                     $links[] = $link['scheme'].'://'.$link['host'].$link['path'].$link['query'];
                 }
+            }
+        }
+
+        return array_unique($links);
+    }
+
+    /**
+     * Get link attributes in a page
+     *
+     * @param \DOMDocument $dom
+     * @param string $tag
+     * @param string $attr
+     * @return array
+     */
+    public function GetAttributes($dom, $tag = 'a', $attr = 'href')
+    {
+        $tags  = $dom->getElementsByTagName($tag);
+        $links = array();
+
+        if($tags->length)
+        {
+            foreach($tags as $item)
+            {
+                $links[] = $item->getAttribute($attr);
             }
         }
 
