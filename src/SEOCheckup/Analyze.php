@@ -84,16 +84,17 @@ class Analyze
     /**
      * Standardizes output
      *
-     * @param $return
+     * @param mixed $return
+     * @param string $service
      * @return array
      */
-    private function Output($return)
+    private function Output($return, $service)
     {
         return [
             'url'       => $this->data['url'],
             'status'    => $this->data['status'],
             'headers'   => $this->data['headers'],
-            'service'   => preg_replace("([A-Z])", " $0", __FUNCTION__),
+            'service'   => preg_replace("([A-Z])", " $0", $service),
             'time'      => time(),
             'data'      => $return
         ];
@@ -131,6 +132,6 @@ class Analyze
         return $this->Output([
             'links'   => $links,
             'scanned' => $scan
-        ]);
+        ], __FUNCTION__);
     }
 }
