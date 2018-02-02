@@ -610,7 +610,7 @@ class Analyze extends PreRequirements
     }
 
     /**
-     * Gets inbound links
+     * Gets meta description
      *
      * @return array
      */
@@ -633,7 +633,7 @@ class Analyze extends PreRequirements
     }
 
     /**
-     * Gets inbound links
+     * Gets meta title
      *
      * @return array
      */
@@ -654,6 +654,29 @@ class Analyze extends PreRequirements
 
 
         return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Gets no-follow tag
+     *
+     * @return array
+     */
+    public function NofollowTag()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('meta');
+        $output = array();
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('name') == 'robots')
+            {
+                $output[] = $tag->getAttribute('content');
+            }
+        }
+
+        return $this->Output(in_array('nofollow',$output), __FUNCTION__);
     }
 
     /**
