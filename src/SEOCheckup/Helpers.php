@@ -96,4 +96,15 @@ class Helpers
 
         return array_unique($links);
     }
+
+    /**
+     * Whitespace cleaner
+     *
+     * @param $input
+     * @return null|string|string[]
+     */
+    public function Whitespace($input)
+    {
+        return preg_replace('!\s+!', ' ', $input);
+    }
 }
