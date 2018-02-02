@@ -474,6 +474,18 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Checks HTTPS
+     *
+     * @return array
+     */
+    public function Https()
+    {
+        $https = ($this->data['parsed_url']['scheme'] === 'https') ? true : false;
+
+        return $this->Output($https, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
