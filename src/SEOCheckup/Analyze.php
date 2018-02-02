@@ -291,4 +291,20 @@ class Analyze
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Determines length of the domain
+     *
+     * @return array
+     */
+    public function DomainLength()
+    {
+        $domain = explode('.',$this->data['parsed_url']['host']);
+
+        array_pop($domain);
+
+        $domain = implode('.',$domain);
+
+        return $this->Output(strlen($domain), __FUNCTION__);
+    }
 }
