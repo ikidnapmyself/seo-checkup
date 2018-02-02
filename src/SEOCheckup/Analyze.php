@@ -111,7 +111,7 @@ class Analyze
         $dom    = $this->DOMDocument();
         $dom->loadHTML($this->data['content']);
 
-        $links  = $this->helpers->GetLinks($dom);
+        $links  = $this->helpers->GetAttributes($dom);
         $scan   = ['errors' => [], 'passed' => []];
         $i      = 0;
 

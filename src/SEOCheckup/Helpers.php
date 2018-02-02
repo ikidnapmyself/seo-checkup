@@ -18,21 +18,23 @@ class Helpers
     }
 
     /**
-     * Get links in a page
+     * Get link attributes in a page
      *
      * @param \DOMDocument $dom
+     * @param string $tag
+     * @param string $attr
      * @return array
      */
-    public function GetLinks($dom)
+    public function GetAttributes($dom, $tag = 'a', $attr = 'href')
     {
-        $tags  = $dom->getElementsByTagName('a');
+        $tags  = $dom->getElementsByTagName($tag);
         $links = array();
 
         if($tags->length)
         {
             foreach($tags as $item)
             {
-                $link = $item->getAttribute('href');
+                $link = $item->getAttribute($attr);
 
                 if($link != '' && strpos($link,'#') !== 0 && strpos(strtolower($link),'javascript:') !== 0)
                 {
