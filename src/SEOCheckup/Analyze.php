@@ -610,6 +610,29 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Gets inbound links
+     *
+     * @return array
+     */
+    public function MetaDescription()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+        $tags   = $dom->getElementsByTagName('meta');
+        $output = '';
+        foreach ($tags as $tag)
+        {
+            $content = $tag->getAttribute('content');
+            if(strtolower($tag->getAttribute('name')) == 'description' && strlen($content) > 0)
+            {
+                $output = $content;
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
