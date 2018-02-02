@@ -18,6 +18,8 @@ class Analyze
      */
     private $data;
 
+    private $guzzle;
+
     /**
      * @var DOMDocument $dom
      */
@@ -31,14 +33,15 @@ class Analyze
      */
     public function __construct($url)
     {
-        $guzzle     = new Client;
-        $response   = $guzzle->get($url);
+        $this->guzzle = new Client;
+        $response     = $this->guzzle->get($url);
 
-        $this->data = [
-            'url'     => $url,
-            'status'  => $response->getStatusCode(),
-            'headers' => $response->getHeaders(),
-            'content' => $response->getBody()->getContents()
+        $this->data   = [
+            'url'        => $url,
+            'parsed_url' => parse_url($url),
+            'status'     => $response->getStatusCode(),
+            'headers'    => $response->getHeaders(),
+            'content'    => $response->getBody()->getContents()
         ];
 
         return $this;
@@ -85,5 +88,4 @@ class Analyze
             'data'      => $return
         ];
     }
-
 }
