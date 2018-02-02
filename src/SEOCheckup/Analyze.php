@@ -432,4 +432,44 @@ class Analyze extends PreRequirements
 
         return $this->Output($ua_id[0][0], __FUNCTION__);
     }
+
+    /**
+     * Checks h1 HTML tag usage
+     *
+     * @return array
+     */
+    public function Header1()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('h1');
+        $output = array();
+        foreach ($tags as $tag)
+        {
+            $output[] = $tag->nodeValue;
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Checks h2 HTML tag usage
+     *
+     * @return array
+     */
+    public function Header2()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('h2');
+        $output = array();
+        foreach ($tags as $tag)
+        {
+            $output[] = $tag->nodeValue;
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
