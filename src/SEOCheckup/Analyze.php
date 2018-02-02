@@ -589,6 +589,27 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Gets inbound links
+     *
+     * @return array
+     */
+    public function InlineCss()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('style');
+        $output = array();
+
+        foreach($tags as $item)
+        {
+            $output[] = $this->helpers->Whitespace($item->textContent);
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
