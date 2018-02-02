@@ -526,6 +526,69 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Gets inbound links
+     *
+     * @return array
+     */
+    public function InboundLinks()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('a');
+        $output = array();
+
+        foreach($tags as $item)
+        {
+            $link = $item->getAttribute('href');
+
+            if($link != '' && strpos($link,'#') !== 0)
+            {
+                $link = parse_url($link);
+
+                if(!isset($link['scheme']))
+                {
+                    $link['scheme'] = $this->data['parsed_url']['scheme'];
+                }
+
+                if(!isset($link['host']))
+                {
+                    $link['host'] = $this->data['parsed_url']['host'];
+                }
+
+                if(!isset($link['path']))
+                {
+                    $link['path'] = '';
+                } else {
+                    if(strpos($link['path'],'/') === false)
+                    {
+                        $link['path'] = '/'.$link['path'];
+                    }
+                }
+
+                if(!isset($link['query']))
+                {
+                    $link['query'] = '';
+                } else {
+                    $link['query'] = '?'.$link['query'];
+                }
+
+                $output[] = $link['scheme'].'://'.$link['host'].$link['path'].$link['query'];
+            }
+        }
+
+        foreach ($output as $key => $link)
+        {
+            if (parse_url($link)['host'] != $this->data['parsed_url']['host']) {
+                unset($output[$key]);
+                continue;
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
