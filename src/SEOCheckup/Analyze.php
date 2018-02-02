@@ -111,7 +111,7 @@ class Analyze
         $dom    = $this->DOMDocument();
         $dom->loadHTML($this->data['content']);
 
-        $links  = $this->helpers->GetAttributes($dom);
+        $links  = $this->helpers->GetLinks($dom);
         $scan   = ['errors' => [], 'passed' => []];
         $i      = 0;
 
@@ -166,6 +166,29 @@ class Analyze
                 $output['html'][] = '<!-- '.trim($comment->textContent).' //-->';
             }
         }
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Checks canonical tag
+     *
+     * @return array
+     */
+    public function CanonicalTag()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+        $output = array();
+        $links  = $this->helpers->GetAttributes($dom, 'link', 'rel');
+
+        foreach($links as $item)
+        {
+            if($item == 'canonical')
+            {
+                $output[] = $item;
+            }
+        }
+
         return $this->Output($output, __FUNCTION__);
     }
 }
