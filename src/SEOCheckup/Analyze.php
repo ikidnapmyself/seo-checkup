@@ -7,6 +7,8 @@ namespace SEOCheckup;
  */
 
 use GuzzleHttp\Client;
+use DOMDocument;
+use DOMXPath;
 
 class Analyze
 {
@@ -16,6 +18,10 @@ class Analyze
      */
     private $data;
 
+    /**
+     * @var DOMDocument $dom
+     */
+    private $dom;
 
     /**
      * Initialize from URL via Guzzle
@@ -25,8 +31,8 @@ class Analyze
      */
     public function __construct($url)
     {
-        $guzzle   = new Client;
-        $response = $guzzle->get($url);
+        $guzzle     = new Client;
+        $response   = $guzzle->get($url);
 
         $this->data = [
             'url'     => $url,
@@ -36,6 +42,30 @@ class Analyze
         ];
 
         return $this;
+    }
+
+    /**
+     * Initialize DOMDocument
+     *
+     * @return DOMDocument
+     */
+    private function DOMDocument()
+    {
+        libxml_use_internal_errors(true);
+
+        $this->dom = new DOMDocument();
+
+        return $this->dom;
+    }
+
+    /**
+     * Initialize DOMXPath
+     *
+     * @return DOMXPath
+     */
+    private function DOMXPath()
+    {
+        return new DOMXPath($this->dom);
     }
 
     /**
