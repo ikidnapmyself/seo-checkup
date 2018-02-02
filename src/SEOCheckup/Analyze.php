@@ -6,11 +6,10 @@ namespace SEOCheckup;
  * @author  Burak <burak@myself.com>
  */
 
-use GuzzleHttp\Client;
 use DOMDocument;
 use DOMXPath;
 
-class Analyze
+class Analyze extends PreRequirements
 {
 
     /**
@@ -18,10 +17,6 @@ class Analyze
      */
     private $data;
 
-    /**
-     * @var Client $guzzle
-     */
-    private $guzzle;
 
     /**
      * @var Helpers $helpers
@@ -41,8 +36,7 @@ class Analyze
      */
     public function __construct($url)
     {
-        $this->guzzle  = new Client;
-        $response      = $this->guzzle->get($url);
+        $response      = $this->Request($url);
 
         $this->data    = [
             'url'        => $url,
@@ -121,7 +115,7 @@ class Analyze
             if($i >= 25)
                 break;
 
-            $status = $this->guzzle->get($link)->getStatusCode();
+            $status = $this->Request($link)->getStatusCode();
 
             if(substr($status,0,1) > 3 && $status != 999)
                 $scan['errors']["HTTP {$status}"][] = $link;
@@ -306,5 +300,53 @@ class Analyze
         $domain = implode('.',$domain);
 
         return $this->Output(strlen($domain), __FUNCTION__);
+    }
+
+    /**
+     * Looks for a favicon
+     *
+     * @return array
+     */
+    public function Favicon()
+    {
+        $ico    = "{$this->data['parsed_url']['scheme']}://{$this->data['parsed_url']['host']}/favicon.ico";
+        $link   = '';
+
+        if($this->Request($ico)->getStatusCode() === 200)
+        {
+            $link   = $ico;
+        } else {
+
+            $dom    = $this->DOMDocument();
+            $dom->loadHTML($this->data['content']);
+
+            $tags   = $dom->getElementsByTagName('link');
+            $fav    = null;
+
+            foreach ($tags as $tag)
+            {
+                if($tag->getAttribute('rel') == 'shortcut icon' OR $tag->getAttribute('rel') == 'icon')
+                {
+                    $fav = $tag->getAttribute('href');
+                    break;
+                }
+            }
+
+            if (!filter_var($fav, FILTER_VALIDATE_URL) === false && $this->Request($fav)->getStatusCode() == 200)
+            {
+                $link = $fav;
+            } else if($this->Request($this->data['parsed_url']['scheme'].'://'.$this->data['parsed_url']['host'].'/'.$fav)->getStatusCode() == 200)
+            {
+                $link = $this->data['parsed_url']['scheme'].'://'.$this->data['parsed_url']['host'].'/'.$fav;
+            } else if($this->Request($_GET['value'].'/'.$fav)->getStatusCode() == 200)
+            {
+                $link = $_GET['value'].'/'.$fav;
+            } else {
+                $link = '';
+            }
+        }
+
+
+        return $this->Output($link, __FUNCTION__);
     }
 }
