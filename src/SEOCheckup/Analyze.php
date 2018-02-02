@@ -680,6 +680,29 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Gets no-index tag
+     *
+     * @return array
+     */
+    public function NoindexTag()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags   = $dom->getElementsByTagName('meta');
+        $output = array();
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('name') == 'robots')
+            {
+                $output[] = $tag->getAttribute('content');
+            }
+        }
+
+        return $this->Output(in_array('noindex',$output), __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
