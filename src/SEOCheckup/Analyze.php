@@ -703,6 +703,55 @@ class Analyze extends PreRequirements
     }
 
     /**
+     * Counts objects in a page
+     *
+     * @return array
+     */
+    public function ObjectCount()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $output = array(
+            'css'    => array(),
+            'script' => array(),
+            'img'    => array()
+        );
+
+        $tags   = $dom->getElementsByTagName('link');
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('type') == 'text/css' OR $tag->getAttribute('rel') == 'stylesheet')
+            {
+                $output['css'][] = $tag->getAttribute('href');
+            }
+        }
+        $output['css']   = array_unique($output['css']);
+
+        $tags   = $dom->getElementsByTagName('script');
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('src') != '')
+            {
+                $output['script'][] = $tag->getAttribute('src');
+            }
+        }
+        $output['script'] = array_unique($output['script']);
+
+        $tags   = $dom->getElementsByTagName('img');
+        foreach ($tags as $tag)
+        {
+            if($tag->getAttribute('src') != '')
+            {
+                $output['img'][] = $tag->getAttribute('src');
+            }
+        }
+        $output['img']   = array_unique($output['img']);
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
      * Checks HTML page compression
      *
      * @return array
