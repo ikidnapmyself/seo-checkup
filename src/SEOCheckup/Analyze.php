@@ -100,7 +100,6 @@ class Analyze
         ];
     }
 
-
     /**
      * Analyze Broken Links in a page
      *
@@ -189,6 +188,26 @@ class Analyze
             }
         }
 
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Determine character set from headers
+     *
+     * @TODO: Use Regex instead of explode
+     * @return array
+     */
+    public function CharacterSet()
+    {
+        $output = '';
+
+        foreach ($this->data['headers'] as $key => $header)
+        {
+            if($key == 'Content-Type')
+            {
+                $output = explode('=', explode(';',$header[0])[1])[1];
+            }
+        }
         return $this->Output($output, __FUNCTION__);
     }
 }
