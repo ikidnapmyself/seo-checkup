@@ -248,4 +248,47 @@ class Analyze
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Checks deprecated HTML tag usage
+     *
+     * @return array
+     */
+    public function DeprecatedHTML()
+    {
+        $dom       = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $deprecated_tags = array(
+            'acronym',
+            'applet',
+            'basefont',
+            'big',
+            'center',
+            'dir',
+            'font',
+            'frame',
+            'frameset',
+            'isindex',
+            'noframes',
+            's',
+            'strike',
+            'tt',
+            'u'
+        );
+
+        $output = array();
+
+        foreach ($deprecated_tags as $tag)
+        {
+            $tags   = $dom->getElementsByTagName($tag);
+
+            if($tags->length > 0)
+            {
+                $output[$tag] = $tags->length;
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
