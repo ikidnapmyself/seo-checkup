@@ -39,13 +39,17 @@ class Analyze extends PreRequirements
         $started_on    = microtime(true);
         $response      = $this->Request($url);
 
+        $parsed_url    = parse_url($url);
+        $dns_recods    = @dns_get_record($parsed_url['host']);
+
         $this->data    = [
-            'url'        => $url,
-            'parsed_url' => parse_url($url),
-            'status'     => $response->getStatusCode(),
-            'headers'    => $response->getHeaders(),
-            'page_speed' => number_format(( microtime(true) - $started_on), 4),
-            'content'    => $response->getBody()->getContents()
+            'url'         => $url,
+            'parsed_url'  => $parsed_url,
+            'status'      => $response->getStatusCode(),
+            'headers'     => $response->getHeaders(),
+            'page_speed'  => number_format(( microtime(true) - $started_on), 4),
+            'dns_records' => is_array($dns_recods) ? $dns_recods : [],
+            'content'     => $response->getBody()->getContents()
         ];
 
         $this->helpers = new Helpers($this->data);
@@ -926,6 +930,26 @@ class Analyze extends PreRequirements
                     }
                 }
             }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * SPF record
+     *
+     * @return array
+     */
+    public function SpfRecord()
+    {
+        $output = array();
+        foreach ($this->data['dns_records'] as $record)
+        {
+            if (strtoupper($record['type']) == 'TXT' && strpos($record['txt'],'spf') !== false)
+            {
+                $output[] = $record['txt'];
+            }
+
         }
 
         return $this->Output($output, __FUNCTION__);
