@@ -91,34 +91,6 @@ class Helpers
     }
 
     /**
-     * Returns page links by host
-     *
-     * @param array $links
-     * @return array
-     */
-    public function GetHosts($links = [])
-    {
-        if(is_array($links) && count($links) > 0)
-        {
-            $this->links = $links;
-        }
-
-        $hosts = [];
-
-        foreach ($this->links as $link)
-        {
-            $parse = parse_url($link);
-
-            if(isset($parse['host']) && !in_array($parse['host'], $hosts))
-            {
-                $hosts[] = $parse['host'];
-            }
-        }
-
-        return $hosts;
-    }
-
-    /**
      * Get link attributes in a page
      *
      * @param \DOMDocument $dom
