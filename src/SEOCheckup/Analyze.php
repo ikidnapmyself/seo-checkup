@@ -36,6 +36,7 @@ class Analyze extends PreRequirements
      */
     public function __construct($url)
     {
+        $started_on    = microtime(true);
         $response      = $this->Request($url);
 
         $this->data    = [
@@ -43,6 +44,7 @@ class Analyze extends PreRequirements
             'parsed_url' => parse_url($url),
             'status'     => $response->getStatusCode(),
             'headers'    => $response->getHeaders(),
+            'page_speed' => number_format(( microtime(true) - $started_on), 4),
             'content'    => $response->getBody()->getContents()
         ];
 
@@ -749,6 +751,16 @@ class Analyze extends PreRequirements
         $output['img']   = array_unique($output['img']);
 
         return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Calculates page speed
+     *
+     * @return array
+     */
+    public function PageSpeed()
+    {
+        return $this->Output($this->data['page_speed'], __FUNCTION__);
     }
 
     /**
