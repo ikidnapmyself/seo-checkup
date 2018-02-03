@@ -930,4 +930,33 @@ class Analyze extends PreRequirements
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Underscored links
+     *
+     * @return array
+     */
+    public function UnderscoredLinks()
+    {
+        $output = array();
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $links  = $this->helpers->GetLinks($dom);
+        foreach($links as $link)
+        {
+            $_link = $link;
+            $link  = parse_url($link);
+
+            if(count($link) && (!isset($link['host']) OR $link['host'] == $this->data['parsed_url']['host']))
+            {
+                if(strpos($_link,'_') !== false)
+                {
+                    $output[] = $_link;
+                }
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
