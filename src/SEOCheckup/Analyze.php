@@ -763,6 +763,65 @@ class Analyze extends PreRequirements
         return $this->Output($this->data['page_speed'], __FUNCTION__);
     }
 
+
+    /**
+     * Checks if there is some plaintext email
+     *
+     * @return array
+     */
+    public function PlaintextEmail()
+    {
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $script = $dom->getElementsByTagName('script');
+        $remove = array();
+
+        foreach($script as $item)
+        {
+            $remove[] = $item;
+        }
+
+        foreach ($remove as $item)
+        {
+            $item->parentNode->removeChild($item);
+        }
+        $style        = $dom->getElementsByTagName('style');
+        $remove       = array();
+
+        foreach($style as $item)
+        {
+            $remove[] = $item;
+        }
+
+        foreach ($remove as $item)
+        {
+            $item->parentNode->removeChild($item);
+        }
+
+        $page   = $dom->saveHTML();
+        $page   = trim(preg_replace('/<[^>]*>/', ' ', $page));
+        $page   = preg_replace('/\s+/', ' ',$page);
+        $page   = explode(' ',$page);
+
+        $output = array();
+        foreach ($page as $item)
+        {
+            $item = trim($item);
+
+            if($item != '' && strpos($item,'@') !== false)
+            {
+                if (!filter_var($item, FILTER_VALIDATE_EMAIL) === false) {
+                    $output[] = $item;
+                }
+            }
+        }
+
+        $output = array_unique($output);
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
     /**
      * Checks HTML page compression
      *
