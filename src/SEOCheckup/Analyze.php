@@ -40,7 +40,7 @@ class Analyze extends PreRequirements
         $response      = $this->Request($url);
 
         $parsed_url    = parse_url($url);
-        $dns_recods    = @dns_get_record($parsed_url['host']);
+        $dns_recods    = (array) @dns_get_record($parsed_url['host']);
 
         $this->data    = [
             'url'         => $url,
@@ -48,7 +48,7 @@ class Analyze extends PreRequirements
             'status'      => $response->getStatusCode(),
             'headers'     => $response->getHeaders(),
             'page_speed'  => number_format(( microtime(true) - $started_on), 4),
-            'dns_records' => is_array($dns_recods) ? $dns_recods : [],
+            'dns_records' => $dns_recods,
             'content'     => $response->getBody()->getContents()
         ];
 
