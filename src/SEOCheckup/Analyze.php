@@ -857,4 +857,31 @@ class Analyze extends PreRequirements
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Server signature
+     *
+     * @return array
+     */
+    public function ServerSignature()
+    {
+        $output = array();
+        $danger = array(
+            'server',
+            'powered'
+        );
+
+        foreach ($this->data['headers'] as $key => $header)
+        {
+            foreach ($danger as $check)
+            {
+                if(strpos(mb_strtolower($key),$check) !== false || strpos(mb_strtolower($header[0]),$check) !== false)
+                {
+                    $output[$key] = $header[0];
+                }
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
