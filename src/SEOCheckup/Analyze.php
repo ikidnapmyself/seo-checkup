@@ -884,4 +884,50 @@ class Analyze extends PreRequirements
 
         return $this->Output($output, __FUNCTION__);
     }
+
+    /**
+     * Social media accounts
+     *
+     * @return array
+     */
+    public function SocialMedia()
+    {
+        $socials = array(
+            'Facebook' => 'facebook.com',
+            'Twitter'  => 'twitter.com',
+            'LinkedIn' => 'linkedin.com',
+            'YouTube'  => 'youtube.com',
+            'GitHub'   => 'github.com'
+        );
+
+        $output = array();
+
+        $dom    = $this->DOMDocument();
+        $dom->loadHTML($this->data['content']);
+
+        $tags         = $dom->getElementsByTagName('a');
+        $collect      = array();
+        foreach($tags as $item)
+        {
+            $link = $item->getAttribute('href');
+
+            foreach ($socials as $key => $social)
+            {
+                if (filter_var($link, FILTER_VALIDATE_URL))
+                {
+                    $host      = parse_url($link)['host'];
+                    $host_name = explode(".", $host);
+                    $host_name = $host_name[count($host_name)-2] . "." . $host_name[count($host_name)-1];
+
+                    if($link != '' && strpos($link,$social) !== false && !in_array($host_name,$collect))
+                    {
+                        $collect[]      = $host_name;
+                        $output[$key][] = $link;
+                    }
+                }
+            }
+        }
+
+        return $this->Output($output, __FUNCTION__);
+    }
 }
