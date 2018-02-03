@@ -9,6 +9,11 @@ class Helpers
     private $data;
 
     /**
+     * @var array $links
+     */
+    private $links;
+
+    /**
      * Helpers constructor
      * @param array $data
      */
@@ -21,9 +26,9 @@ class Helpers
      * Get links in a page
      *
      * @param \DOMDocument $dom
-     * @return array
+     * @return $this
      */
-    public function GetLinks($dom)
+    public function Links($dom)
     {
         $tags  = $dom->getElementsByTagName('a');
         $links = array();
@@ -70,7 +75,47 @@ class Helpers
             }
         }
 
-        return array_unique($links);
+        $this->links = array_unique($links);
+
+        return $this;
+    }
+
+    /**
+     * Return page links
+     *
+     * @return array
+     */
+    public function GetLinks()
+    {
+        return $this->links;
+    }
+
+    /**
+     * Returns page links by host
+     *
+     * @param array $links
+     * @return array
+     */
+    public function GetHosts($links = [])
+    {
+        if(is_array($links) && count($links) > 0)
+        {
+            $this->links = $links;
+        }
+
+        $hosts = [];
+
+        foreach ($this->links as $link)
+        {
+            $parse = parse_url($link);
+
+            if(isset($parse['host']) && !in_array($parse['host'], $hosts))
+            {
+                $hosts[] = $parse['host'];
+            }
+        }
+
+        return $hosts;
     }
 
     /**
