@@ -9,8 +9,6 @@ developers. I made a simple package to let you check yourself with this package.
 but I am going to make a free service in the future and I will use this package. During the development process of the service, 
 I will update this class as much as I need.
 
-Any contribution in this case, more than welcome.
-
 ### Installation
 
 You will need, `Composer`. If you already have it, run the code, shown below
@@ -19,3 +17,9 @@ composer require frnxstd/seo-checkup
 ```
 
 Enjoy.
+
+### Contribution
+
+Tests and re-design for the class is required. 
+
+Any contribution in this case, more than welcome.
