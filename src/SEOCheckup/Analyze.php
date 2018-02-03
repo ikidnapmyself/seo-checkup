@@ -110,7 +110,7 @@ class Analyze extends PreRequirements
         $dom    = $this->DOMDocument();
         $dom->loadHTML($this->data['content']);
 
-        $links  = $this->helpers->GetLinks($dom);
+        $links  = $this->helpers->Links($dom)->GetLinks();
         $scan   = ['errors' => [], 'passed' => []];
         $i      = 0;
 
@@ -905,29 +905,18 @@ class Analyze extends PreRequirements
         );
 
         $output = array();
-
         $dom    = $this->DOMDocument();
         $dom->loadHTML($this->data['content']);
 
-        $tags         = $dom->getElementsByTagName('a');
-        $collect      = array();
-        foreach($tags as $item)
-        {
-            $link = $item->getAttribute('href');
+        $links  = $this->helpers->Links($dom)->GetLinks();
 
+        foreach($links as $link)
+        {
             foreach ($socials as $key => $social)
             {
-                if (filter_var($link, FILTER_VALIDATE_URL))
+                if(strpos($link, $social) !== false)
                 {
-                    $host      = parse_url($link)['host'];
-                    $host_name = explode(".", $host);
-                    $host_name = $host_name[count($host_name)-2] . "." . $host_name[count($host_name)-1];
-
-                    if($link != '' && strpos($link,$social) !== false && !in_array($host_name,$collect))
-                    {
-                        $collect[]      = $host_name;
-                        $output[$key][] = $link;
-                    }
+                    $output[$key][] = $link;
                 }
             }
         }
@@ -966,7 +955,7 @@ class Analyze extends PreRequirements
         $dom    = $this->DOMDocument();
         $dom->loadHTML($this->data['content']);
 
-        $links  = $this->helpers->GetLinks($dom);
+        $links  = $this->helpers->Links($dom)->GetLinks();
         foreach($links as $link)
         {
             $_link = $link;
