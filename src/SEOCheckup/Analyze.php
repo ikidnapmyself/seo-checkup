@@ -763,7 +763,6 @@ class Analyze extends PreRequirements
         return $this->Output($this->data['page_speed'], __FUNCTION__);
     }
 
-
     /**
      * Checks if there is some plaintext email
      *
@@ -836,6 +835,25 @@ class Analyze extends PreRequirements
         $output['possible']   = round(strlen($output['possible']) / 1024,2);
         $output['percentage'] = round((($output['possible'] * 100) / $output['actual']),2);
         $output['difference'] = round($output['actual'] - $output['possible'],2);
+
+        return $this->Output($output, __FUNCTION__);
+    }
+
+    /**
+     * Checks robots.txt
+     *
+     * @return array
+     */
+    public function RobotsFile()
+    {
+        $output = $this->Request("{$this->data['parsed_url']['scheme']}://{$this->data['parsed_url']['host']}/robots.txt");
+
+        if($output->getStatusCode() === 200)
+        {
+            $output = $output->getBody()->getContents();
+        } else {
+            $output = false;
+        }
 
         return $this->Output($output, __FUNCTION__);
     }
