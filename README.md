@@ -23,3 +23,48 @@ Enjoy.
 Tests and re-design for the class is required. 
 
 Any contribution in this case, more than welcome.
+
+### List of Services The Package Serves
+
+- Broken Links  `BrokenLinks()`
+- Cache `Cache()`
+- Canonica lTag `CanonicalTag()`
+- Character Set `CharacterSet()`
+- Code Content Ratio    `CodeContent()`
+- Deprecated HTML Tags  `DeprecatedHTML()`
+- Domain Length `DomainLength()`
+- Favicon   `Favicon()`
+- Frameset  `Frameset()`
+- Google Analytics  `GoogleAnalytics()`
+- Header1   `Header1()`
+- Header2   `Header2()`
+- Https `Https()`
+- Image Alt `ImageAlt()`
+- Inbound Links `InboundLinks()`
+- Inline Css    `InlineCss()`
+- Meta Description  `MetaDescription()`
+- Meta Title    `MetaTitle()`
+- No-follow Tag `NofollowTag()`
+- No-index Tag  `NoindexTag()`
+- Object Counter    `ObjectCount()`
+- Page peed `PageSpeed()`
+- Plaintext Email   `PlaintextEmail()`
+- Page Compression  `PageCompression()`
+- Robots.txt File   `RobotsFile()`
+- Server Signature  `ServerSignature()`
+- Social Media Links    `SocialMedia()`
+- Spf Record    `SpfRecord()`
+- Underscored Links `UnderscoredLinks()`
+
+### How to use?
+
+You can use any function listed above. An example usage is here:
+```
+require_once __DIR__ . '/../vendor/autoload.php'; // Autoload files using Composer autoload
+
+use SEOCheckup\Analyze;
+
+$analyze = new Analyze('http://domain.com');
+
+var_dump($analyze->NoindexTag());
+```
