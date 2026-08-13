@@ -56,27 +56,55 @@ final class UrlResolver
     }
 
     /**
-     * RFC 3986 section 5.2.4.
+     * RFC 3986 section 5.2.4 with root-escape prevention.
+     *
+     * Removes dot segments (. and ..) from a path, normalizing it.
+     * Preserves trailing slashes when the path ends with a dot segment.
+     * Prevents escaping above the root: segments after root escape are dropped.
      */
     private static function removeDotSegments(string $path): string
     {
+        $segments = explode('/', $path);
         $output = [];
+        $lastWasDotSegment = false;
+        $escapedAboveRoot = false;
 
-        foreach (explode('/', $path) as $segment) {
-            if ($segment === '.') {
+        foreach ($segments as $segment) {
+            if ($segment === '.' || $segment === '') {
+                // Empty segments come from leading /, trailing /, or double slashes
+                // A single . represents the current directory
+                $lastWasDotSegment = ($segment === '.');
                 continue;
             }
 
             if ($segment === '..') {
-                array_pop($output);
+                // Go up one directory
+                if (!empty($output)) {
+                    array_pop($output);
+                } else {
+                    // Already at root, trying to escape above
+                    $escapedAboveRoot = true;
+                }
+                $lastWasDotSegment = true;
                 continue;
             }
 
-            $output[] = $segment;
+            // Don't add regular segments if we've escaped above root
+            if (!$escapedAboveRoot) {
+                $output[] = $segment;
+            }
+            $lastWasDotSegment = false;
         }
 
-        $result = implode('/', $output);
+        // Rebuild the path with leading slash
+        $result = '/' . implode('/', $output);
 
-        return str_starts_with($result, '/') ? $result : '/' . $result;
+        // If the path ended with a dot segment or is just the root with trailing slash,
+        // ensure it ends with a slash
+        if ($lastWasDotSegment && $result !== '/') {
+            $result .= '/';
+        }
+
+        return $result;
     }
 }

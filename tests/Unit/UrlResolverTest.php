@@ -63,6 +63,38 @@ final class UrlResolverTest extends TestCase
         );
     }
 
+    public function testPreservesTrailingSlashWhenDotSegmentConsumesLastSegment(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/',
+            UrlResolver::resolve($this->base, 'foo/..')
+        );
+    }
+
+    public function testPreservesTrailingSlashForCurrentDirectory(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/',
+            UrlResolver::resolve($this->base, '.')
+        );
+    }
+
+    public function testPreservesTrailingSlashWhenDoubleDotConsumesLastSegment(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/a/',
+            UrlResolver::resolve($this->base, 'a/b/..')
+        );
+    }
+
+    public function testPreventsEscapingAboveRoot(): void
+    {
+        self::assertSame(
+            'https://example.com/',
+            UrlResolver::resolve($this->base, '../../../etc')
+        );
+    }
+
     /**
      * Spec defect 6: these used to be emitted as "mailto://example.com".
      *
