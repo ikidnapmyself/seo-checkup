@@ -56,55 +56,66 @@ final class UrlResolver
     }
 
     /**
-     * RFC 3986 section 5.2.4 with root-escape prevention.
+     * RFC 3986 section 5.2.4.
      *
      * Removes dot segments (. and ..) from a path, normalizing it.
-     * Preserves trailing slashes when the path ends with a dot segment.
-     * Prevents escaping above the root: segments after root escape are dropped.
+     * Uses the proper RFC algorithm which preserves empty segments (for trailing slashes
+     * and double slashes) and treats excess `..` at the root as a no-op.
      */
     private static function removeDotSegments(string $path): string
     {
-        $segments = explode('/', $path);
+        $inputBuffer = $path;
         $output = [];
-        $lastWasDotSegment = false;
-        $escapedAboveRoot = false;
 
-        foreach ($segments as $segment) {
-            if ($segment === '.' || $segment === '') {
-                // Empty segments come from leading /, trailing /, or double slashes
-                // A single . represents the current directory
-                $lastWasDotSegment = ($segment === '.');
-                continue;
+        while ($inputBuffer !== '') {
+            // A: If input begins with "../" or "./", remove that prefix
+            if (str_starts_with($inputBuffer, '../')) {
+                $inputBuffer = substr($inputBuffer, 3);
+            } elseif (str_starts_with($inputBuffer, './')) {
+                $inputBuffer = substr($inputBuffer, 2);
             }
-
-            if ($segment === '..') {
-                // Go up one directory
-                if (!empty($output)) {
-                    array_pop($output);
+            // B: If input begins with "/./" or is "/..", replace with "/"
+            elseif (str_starts_with($inputBuffer, '/./')) {
+                $inputBuffer = '/' . substr($inputBuffer, 3);
+            } elseif ($inputBuffer === '/.') {
+                $inputBuffer = '/';
+            }
+            // C: If input begins with "/../" or is "/..", replace with "/" and pop output
+            elseif (str_starts_with($inputBuffer, '/../')) {
+                $inputBuffer = '/' . substr($inputBuffer, 4);
+                array_pop($output);  // No-op if output is empty (at root)
+            } elseif ($inputBuffer === '/..') {
+                $inputBuffer = '/';
+                array_pop($output);  // No-op if output is empty (at root)
+            }
+            // D: If input is "." or "..", remove it
+            elseif ($inputBuffer === '.' || $inputBuffer === '..') {
+                $inputBuffer = '';
+            }
+            // E: Move first path segment to output
+            else {
+                if (str_starts_with($inputBuffer, '/')) {
+                    // Starts with "/", find the next "/" (don't include it)
+                    $pos = strpos($inputBuffer, '/', 1);
+                    if ($pos === false) {
+                        $segEnd = strlen($inputBuffer);
+                    } else {
+                        $segEnd = $pos;
+                    }
                 } else {
-                    // Already at root, trying to escape above
-                    $escapedAboveRoot = true;
+                    // Doesn't start with "/", find the first "/" (don't include it)
+                    $pos = strpos($inputBuffer, '/');
+                    if ($pos === false) {
+                        $segEnd = strlen($inputBuffer);
+                    } else {
+                        $segEnd = $pos;
+                    }
                 }
-                $lastWasDotSegment = true;
-                continue;
+                $output[] = substr($inputBuffer, 0, $segEnd);
+                $inputBuffer = substr($inputBuffer, $segEnd);
             }
-
-            // Don't add regular segments if we've escaped above root
-            if (!$escapedAboveRoot) {
-                $output[] = $segment;
-            }
-            $lastWasDotSegment = false;
         }
 
-        // Rebuild the path with leading slash
-        $result = '/' . implode('/', $output);
-
-        // If the path ended with a dot segment or is just the root with trailing slash,
-        // ensure it ends with a slash
-        if ($lastWasDotSegment && $result !== '/') {
-            $result .= '/';
-        }
-
-        return $result;
+        return implode('', $output);
     }
 }

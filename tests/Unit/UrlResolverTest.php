@@ -87,10 +87,34 @@ final class UrlResolverTest extends TestCase
         );
     }
 
-    public function testPreventsEscapingAboveRoot(): void
+    public function testPreservesTrailingSlashInLiteralHref(): void
     {
         self::assertSame(
-            'https://example.com/',
+            'https://example.com/blog/foo/',
+            UrlResolver::resolve($this->base, 'foo/')
+        );
+    }
+
+    public function testPreservesTrailingSlashInNestedPath(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/sub/dir/',
+            UrlResolver::resolve($this->base, 'sub/dir/')
+        );
+    }
+
+    public function testPreservesDoubleSplash(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/foo//bar',
+            UrlResolver::resolve($this->base, 'foo//bar')
+        );
+    }
+
+    public function testRootEscapeIsNoOp(): void
+    {
+        self::assertSame(
+            'https://example.com/etc',
             UrlResolver::resolve($this->base, '../../../etc')
         );
     }
