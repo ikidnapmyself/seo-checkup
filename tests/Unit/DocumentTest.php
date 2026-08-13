@@ -55,4 +55,34 @@ final class DocumentTest extends TestCase
 
         self::assertSame(1, $document->tags('main')->length);
     }
+
+    public function testPreservesUtf8WithoutCharsetDeclaration(): void
+    {
+        $document = new Document('<html><body><p>café naïve 中文</p></body></html>');
+
+        $text = $document->text();
+
+        self::assertStringContainsString('café', $text);
+        self::assertStringContainsString('naïve', $text);
+        self::assertStringContainsString('中文', $text);
+    }
+
+    public function testPreservesUtf8WithCharsetDeclaration(): void
+    {
+        $document = new Document('<html><head><meta charset="utf-8"></head><body><p>café naïve 中文</p></body></html>');
+
+        $text = $document->text();
+
+        self::assertStringContainsString('café', $text);
+        self::assertStringContainsString('naïve', $text);
+        self::assertStringContainsString('中文', $text);
+    }
+
+    public function testDoesNotInjectNodes(): void
+    {
+        $document = new Document('<html><head><meta name="description" content="x"></head><body><p>café</p></body></html>');
+
+        // Should still be exactly 1 meta tag, not injected ones
+        self::assertSame(1, $document->tags('meta')->length);
+    }
 }

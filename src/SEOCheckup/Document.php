@@ -32,6 +32,9 @@ final class Document
             // parser and raise "Tag invalid"; that is why errors are muted.
             // Replacing the parser is a deferred item, not a change for 1.0.0.
             if ($html !== '') {
+                // DOMDocument::loadHTML() defaults to ISO-8859-1 when no charset
+                // is declared, corrupting UTF-8. Encode non-ASCII to numeric entities.
+                $html = mb_encode_numericentity($html, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8');
                 $dom->loadHTML($html);
             }
         } finally {
