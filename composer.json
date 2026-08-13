@@ -1,29 +1,49 @@
 {
-    "name": "frnxstd/seo-checkup",
-    "description": "PHP Toolbox for SEO Checkup",
+    "name": "ikidnapmyself/seo-checkup",
+    "description": "PHP toolbox for SEO checkup",
     "license": "MIT",
     "authors": [
         {
-            "name": "Burak",
-            "email": "burak@myself.com"
+            "name": "Burak"
         }
     ],
-    "repositories": [
-        {
-            "type": "path",
-            "url": "src/SEOCheckup",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
+    "replace": {
+        "frnxstd/seo-checkup": "*"
+    },
     "require": {
-        "php": ">=5.3",
-        "guzzlehttp/guzzle": "*"
+        "php": ">=8.3",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^2.0",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.0",
+        "phpstan/phpstan": "^2.0",
+        "friendsofphp/php-cs-fixer": "^3.64"
     },
     "autoload": {
         "psr-4": {
             "SEOCheckup\\": "src/SEOCheckup/"
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SEOCheckup\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "check": [
+            "@test",
+            "@stan",
+            "@cs"
+        ]
+    },
+    "config": {
+        "sort-packages": true
     }
 }
