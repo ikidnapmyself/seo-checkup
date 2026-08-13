@@ -1,0 +1,90 @@
+<?php
+
+namespace SEOCheckup\Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+use SEOCheckup\Url;
+use SEOCheckup\UrlResolver;
+
+final class UrlResolverTest extends TestCase
+{
+    private Url $base;
+
+    protected function setUp(): void
+    {
+        $this->base = Url::fromString('https://example.com/blog/post.html?x=1');
+    }
+
+    public function testKeepsAbsoluteUrl(): void
+    {
+        self::assertSame(
+            'https://other.test/a',
+            UrlResolver::resolve($this->base, 'https://other.test/a')
+        );
+    }
+
+    public function testResolvesProtocolRelative(): void
+    {
+        self::assertSame(
+            'https://cdn.test/a.js',
+            UrlResolver::resolve($this->base, '//cdn.test/a.js')
+        );
+    }
+
+    public function testResolvesRootRelative(): void
+    {
+        self::assertSame(
+            'https://example.com/about',
+            UrlResolver::resolve($this->base, '/about')
+        );
+    }
+
+    public function testResolvesDocumentRelativeAgainstTheDirectory(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/next.html',
+            UrlResolver::resolve($this->base, 'next.html')
+        );
+    }
+
+    public function testResolvesDotSegments(): void
+    {
+        self::assertSame(
+            'https://example.com/about.html',
+            UrlResolver::resolve($this->base, '../about.html')
+        );
+    }
+
+    public function testKeepsQueryAndDropsFragment(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/a.html?p=2',
+            UrlResolver::resolve($this->base, 'a.html?p=2#section')
+        );
+    }
+
+    /**
+     * Spec defect 6: these used to be emitted as "mailto://example.com".
+     *
+     * @return list<array{string}>
+     */
+    public static function unresolvableHrefs(): array
+    {
+        return [
+            [''],
+            ['   '],
+            ['#top'],
+            ['mailto:someone@example.com'],
+            ['tel:+15551234'],
+            ['javascript:void(0)'],
+            ['JavaScript:void(0)'],
+            ['data:text/plain;base64,AAAA'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unresolvableHrefs')]
+    public function testRejectsNonHttpHrefs(string $href): void
+    {
+        self::assertNull(UrlResolver::resolve($this->base, $href));
+    }
+}
