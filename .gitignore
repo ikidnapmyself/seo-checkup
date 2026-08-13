@@ -1,5 +1,4 @@
 /vendor/
-/tests/
 .idea/
 composer.lock
 /docs/
