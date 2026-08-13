@@ -1,127 +1,67 @@
 <?php
+
 namespace SEOCheckup;
 
-class Helpers
+use SEOCheckup\Exception\InvalidUrlException;
+
+final class Helpers
 {
     /**
-     * @var array $data
-     */
-    private $data;
-
-    /**
-     * @var array $links
-     */
-    private $links;
-
-    /**
-     * Helpers constructor
-     * @param array $data
-     */
-    public function __construct($data)
-    {
-        $this->data = $data;
-    }
-
-    /**
-     * Get links in a page
+     * Unique absolute http(s) links in a page.
      *
-     * @param \DOMDocument $dom
-     * @return $this
+     * @return list<string>
      */
-    public function Links($dom)
+    public static function links(Document $document, Url $base): array
     {
-        $tags  = $dom->getElementsByTagName('a');
-        $links = array();
+        $base  = self::baseUrl($document, $base);
+        $links = [];
 
-        if($tags->length)
-        {
-            foreach($tags as $item)
-            {
-                $link = $item->getAttribute('href');
+        foreach ($document->tags('a') as $anchor) {
+            $resolved = UrlResolver::resolve($base, $anchor->getAttribute('href'));
 
-                if($link != '' && strpos($link,'#') !== 0 && strpos(strtolower($link),'javascript:') !== 0)
-                {
-                    $link = parse_url($link);
-
-                    if(!isset($link['scheme']))
-                    {
-                        $link['scheme'] = $this->data['parsed_url']['scheme'];
-                    }
-
-                    if(!isset($link['host']))
-                    {
-                        $link['host'] = $this->data['parsed_url']['host'];
-                    }
-
-                    if(!isset($link['path']))
-                    {
-                        $link['path'] = '';
-                    } else {
-                        if(strpos($link['path'],'/')  !== 0)
-                        {
-                            $link['path'] = '/'.$link['path'];
-                        }
-                    }
-
-                    if(!isset($link['query']))
-                    {
-                        $link['query'] = '';
-                    } else {
-                        $link['query'] = '?'.$link['query'];
-                    }
-
-                    $links[] = $link['scheme'].'://'.$link['host'].$link['path'].$link['query'];
-                }
+            if ($resolved !== null) {
+                $links[$resolved] = true;
             }
         }
 
-        $this->links = array_unique($links);
-
-        return $this;
+        return array_keys($links);
     }
 
     /**
-     * Return page links
-     *
-     * @return array
+     * @return list<string>
      */
-    public function GetLinks()
+    public static function attributes(Document $document, string $tag = 'a', string $attr = 'href'): array
     {
-        return $this->links;
+        $values = [];
+
+        foreach ($document->tags($tag) as $element) {
+            $values[$element->getAttribute($attr)] = true;
+        }
+
+        return array_keys($values);
     }
 
-    /**
-     * Get link attributes in a page
-     *
-     * @param \DOMDocument $dom
-     * @param string $tag
-     * @param string $attr
-     * @return array
-     */
-    public function GetAttributes($dom, $tag = 'a', $attr = 'href')
+    public static function whitespace(string $input): string
     {
-        $tags  = $dom->getElementsByTagName($tag);
-        $links = array();
+        return preg_replace('!\s+!', ' ', $input) ?? $input;
+    }
 
-        if($tags->length)
-        {
-            foreach($tags as $item)
-            {
-                $links[] = $item->getAttribute($attr);
+    public static function baseUrl(Document $document, Url $fallback): Url
+    {
+        foreach ($document->tags('base') as $element) {
+            $href = trim($element->getAttribute('href'));
+
+            if ($href === '') {
+                continue;
+            }
+
+            try {
+                return Url::fromString($href);
+            } catch (InvalidUrlException) {
+                return $fallback;
             }
         }
 
-        return array_unique($links);
-    }
-
-    /**
-     * Whitespace cleaner
-     *
-     * @param $input
-     * @return null|string|string[]
-     */
-    public function Whitespace($input)
-    {
-        return preg_replace('!\s+!', ' ', $input);
+        return $fallback;
     }
 }
