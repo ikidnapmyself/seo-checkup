@@ -153,18 +153,27 @@ class Analyze
     }
 
     /**
-     * Checks canonical tag
+     * The canonical URL declared by the page, resolved to absolute.
      *
      * @return array<string, mixed>
      */
     public function canonicalTag(): array
     {
-        $output = [];
-        $links  = Helpers::attributes($this->document, 'link', 'rel');
+        $output = '';
 
-        foreach ($links as $item) {
-            if ($item == 'canonical') {
-                $output[] = $item;
+        foreach ($this->document->tags('link') as $link) {
+            if (strtolower($link->getAttribute('rel')) !== 'canonical') {
+                continue;
+            }
+
+            $resolved = UrlResolver::resolve(
+                Helpers::baseUrl($this->document, $this->page->parsed),
+                $link->getAttribute('href')
+            );
+
+            if ($resolved !== null) {
+                $output = $resolved;
+                break;
             }
         }
 
@@ -310,22 +319,9 @@ class Analyze
      */
     public function frameset(): array
     {
-        $tags   = $this->document->tags('frameset');
-        $output = ['frameset' => [], 'frame' => []];
-
-        foreach ($tags as $tag) {
-            $output['frameset'][] = null;
-        }
-
-        $tags = $this->document->tags('frame');
-
-        foreach ($tags as $tag) {
-            $output['frame'][] = null;
-        }
-
         return $this->output([
-            'frameset' => count($output['frameset']),
-            'frame'    => count($output['frame']),
+            'frameset' => $this->document->tags('frameset')->length,
+            'frame'    => $this->document->tags('frame')->length,
         ], __FUNCTION__);
     }
 
@@ -570,16 +566,7 @@ class Analyze
      */
     public function nofollowTag(): array
     {
-        $tags   = $this->document->tags('meta');
-        $output = [];
-
-        foreach ($tags as $tag) {
-            if ($tag->getAttribute('name') == 'robots') {
-                $output[] = $tag->getAttribute('content');
-            }
-        }
-
-        return $this->output(in_array('nofollow', $output), __FUNCTION__);
+        return $this->output(in_array('nofollow', $this->robotsDirectives(), true), __FUNCTION__);
     }
 
     /**
@@ -589,16 +576,33 @@ class Analyze
      */
     public function noindexTag(): array
     {
-        $tags   = $this->document->tags('meta');
-        $output = [];
+        return $this->output(in_array('noindex', $this->robotsDirectives(), true), __FUNCTION__);
+    }
 
-        foreach ($tags as $tag) {
-            if ($tag->getAttribute('name') == 'robots') {
-                $output[] = $tag->getAttribute('content');
+    /**
+     * Directives from every <meta name="robots"> tag, lowercased and split.
+     *
+     * @return list<string>
+     */
+    private function robotsDirectives(): array
+    {
+        $directives = [];
+
+        foreach ($this->document->tags('meta') as $meta) {
+            if (strtolower($meta->getAttribute('name')) !== 'robots') {
+                continue;
+            }
+
+            foreach (explode(',', $meta->getAttribute('content')) as $directive) {
+                $directive = strtolower(trim($directive));
+
+                if ($directive !== '') {
+                    $directives[] = $directive;
+                }
             }
         }
 
-        return $this->output(in_array('noindex', $output), __FUNCTION__);
+        return $directives;
     }
 
     /**
@@ -712,11 +716,6 @@ class Analyze
         return $this->output($output, __FUNCTION__);
     }
 
-    /**
-     * Server signature
-     *
-     * @return array<string, mixed>
-     */
     /**
      * Headers that reveal the server stack.
      *
