@@ -49,4 +49,23 @@ final class UrlTest extends TestCase
         $this->expectException(InvalidUrlException::class);
         Url::fromString('ftp://example.com/file');
     }
+
+    public function testRejectsHostWithSpace(): void
+    {
+        $this->expectException(InvalidUrlException::class);
+        Url::fromString('http://example .com/path');
+    }
+
+    public function testRejectsPathWithSpace(): void
+    {
+        $this->expectException(InvalidUrlException::class);
+        Url::fromString('https://example.com/path with space');
+    }
+
+    public function testAcceptsHostWithHyphensAndMultipleLabels(): void
+    {
+        $url = Url::fromString('https://my-api.sub-domain.example.com/test');
+
+        self::assertSame('my-api.sub-domain.example.com', $url->host);
+    }
 }

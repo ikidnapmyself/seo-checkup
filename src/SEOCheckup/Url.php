@@ -38,15 +38,57 @@ final readonly class Url implements Stringable
             throw new InvalidUrlException(sprintf('URL has no host: "%s".', $url));
         }
 
+        $host = strtolower($parts['host']);
+        self::validateHost($host, $url);
+
         $path = $parts['path'] ?? '';
+        self::validatePath($path, $url);
 
         return new self(
             $scheme,
-            strtolower($parts['host']),
+            $host,
             $parts['port'] ?? null,
             $path === '' ? '/' : $path,
             $parts['query'] ?? '',
         );
+    }
+
+    private static function validateHost(string $host, string $url): void
+    {
+        // Reject hosts with whitespace
+        if (preg_match('/\s/', $host)) {
+            throw new InvalidUrlException(sprintf('Host contains whitespace: "%s".', $url));
+        }
+
+        // IPv6 in brackets
+        if (str_starts_with($host, '[') && str_ends_with($host, ']')) {
+            return;
+        }
+
+        // IPv4 addresses
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return;
+        }
+
+        // localhost
+        if ($host === 'localhost') {
+            return;
+        }
+
+        // DNS labels: alphanumeric and hyphen, but not starting/ending with hyphen
+        // Allow multiple labels separated by dots
+        // Allow punycode (xn-- prefix)
+        if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $host)) {
+            throw new InvalidUrlException(sprintf('Invalid hostname format: "%s".', $url));
+        }
+    }
+
+    private static function validatePath(string $path, string $url): void
+    {
+        // Reject paths with whitespace
+        if (preg_match('/\s/', $path)) {
+            throw new InvalidUrlException(sprintf('Path contains whitespace: "%s".', $url));
+        }
     }
 
     public function origin(): string
