@@ -2,7 +2,6 @@
 
 namespace SEOCheckup\Tests\Support;
 
-use GuzzleHttp\Psr7\Response;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -22,7 +21,7 @@ class FakeHttpClient implements ClientInterface
      */
     public function route(string $url, string $body, int $status = 200, array $headers = []): self
     {
-        $this->routes[$url] = new Response($status, $headers, $body);
+        $this->routes[$url] = new FakeResponse($status, $headers, $body);
 
         return $this;
     }
@@ -36,6 +35,6 @@ class FakeHttpClient implements ClientInterface
         $url = (string) $request->getUri();
         $this->requested[] = $url;
 
-        return $this->routes[$url] ?? new Response(404, [], '');
+        return $this->routes[$url] ?? new FakeResponse(404, [], '');
     }
 }

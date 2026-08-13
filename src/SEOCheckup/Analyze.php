@@ -85,31 +85,25 @@ class Analyze
         return ucfirst(trim((string) preg_replace('/(?<!^)[A-Z]/', ' $0', $method)));
     }
 
+    public const BROKEN_LINKS_LIMIT = 25;
+
     /**
-     * Analyze Broken Links in a page
+     * Status of the first $limit links on the page.
+     *
+     * 999 is LinkedIn's bot-block response, not a broken link.
      *
      * @return array<string, mixed>
      */
-    public function brokenLinks(): array
+    public function brokenLinks(int $limit = self::BROKEN_LINKS_LIMIT): array
     {
         $links = Helpers::links($this->document, $this->page->parsed);
         $scan  = ['errors' => [], 'passed' => []];
-        $i     = 0;
 
-        foreach ($links as $link) {
-            $i++;
-
-            if ($i >= 25) {
-                break;
-            }
-
+        foreach (array_slice($links, 0, $limit) as $link) {
             $status = $this->fetcher->status($link);
+            $bucket = ($status >= 400 && $status !== 999) || $status === 0 ? 'errors' : 'passed';
 
-            if (substr((string) $status, 0, 1) > 3 && $status != 999) {
-                $scan['errors']["HTTP {$status}"][] = $link;
-            } else {
-                $scan['passed']["HTTP {$status}"][] = $link;
-            }
+            $scan[$bucket]["HTTP {$status}"][] = $link;
         }
 
         return $this->output([
@@ -450,51 +444,17 @@ class Analyze
     }
 
     /**
-     * Gets inbound links
+     * Links that stay on the same host.
      *
      * @return array<string, mixed>
      */
     public function inboundLinks(): array
     {
-        $tags   = $this->document->tags('a');
         $output = [];
 
-        foreach ($tags as $item) {
-            $link = $item->getAttribute('href');
-
-            if ($link != '' && strpos($link, '#') !== 0) {
-                $link = (array) parse_url($link);
-
-                if (!isset($link['scheme'])) {
-                    $link['scheme'] = $this->page->parsed->scheme;
-                }
-
-                if (!isset($link['host'])) {
-                    $link['host'] = $this->page->parsed->host;
-                }
-
-                if (!isset($link['path'])) {
-                    $link['path'] = '';
-                } else {
-                    if (strpos($link['path'], '/') === false) {
-                        $link['path'] = '/' . $link['path'];
-                    }
-                }
-
-                if (!isset($link['query'])) {
-                    $link['query'] = '';
-                } else {
-                    $link['query'] = '?' . $link['query'];
-                }
-
-                $output[] = $link['scheme'] . '://' . $link['host'] . $link['path'] . $link['query'];
-            }
-        }
-
-        foreach ($output as $key => $link) {
-            if (parse_url($link, PHP_URL_HOST) != $this->page->parsed->host) {
-                unset($output[$key]);
-                continue;
+        foreach (Helpers::links($this->document, $this->page->parsed) as $link) {
+            if (parse_url($link, PHP_URL_HOST) === $this->page->parsed->host) {
+                $output[] = $link;
             }
         }
 
@@ -785,23 +745,21 @@ class Analyze
     }
 
     /**
-     * Underscored links
+     * Internal links containing an underscore.
      *
      * @return array<string, mixed>
      */
     public function underscoredLinks(): array
     {
         $output = [];
-        $links  = Helpers::links($this->document, $this->page->parsed);
 
-        foreach ($links as $link) {
-            $_link = $link;
-            $link  = (array) parse_url($link);
+        foreach (Helpers::links($this->document, $this->page->parsed) as $link) {
+            if (parse_url($link, PHP_URL_HOST) !== $this->page->parsed->host) {
+                continue;
+            }
 
-            if (count($link) && (!isset($link['host']) || $link['host'] == $this->page->parsed->host)) {
-                if (strpos($_link, '_') !== false) {
-                    $output[] = $_link;
-                }
+            if (str_contains($link, '_')) {
+                $output[] = $link;
             }
         }
 
