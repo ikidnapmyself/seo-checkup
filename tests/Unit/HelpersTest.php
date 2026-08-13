@@ -91,4 +91,53 @@ final class HelpersTest extends TestCase
     {
         self::assertSame(' a b ', Helpers::whitespace("\n a \t\t b \n"));
     }
+
+    /**
+     * Finding 1: attributes() must return list<string>, not mixed types.
+     * Purely-numeric attribute values should not be coerced to integers.
+     */
+    public function testAttributesPreservesStringType(): void
+    {
+        $document = new Document(
+            '<html><body>'
+            . '<img src="123">'
+            . '<img src="0">'
+            . '<img src="007">'
+            . '</body></html>'
+        );
+
+        $result = Helpers::attributes($document, 'img', 'src');
+        self::assertSame(['123', '0', '007'], $result);
+
+        // Verify every element is actually a string, not an int.
+        foreach ($result as $value) {
+            self::assertIsString($value, "Expected string, got " . gettype($value));
+        }
+    }
+
+    /**
+     * Finding 2: baseUrl() must resolve relative <base href> against the page URL.
+     */
+    public function testHonoursRelativeBaseHref(): void
+    {
+        $document = new Document(
+            '<html><head><base href="/assets/"></head>'
+            . '<body><a href="x.html">x</a></body></html>'
+        );
+
+        self::assertSame(['https://example.com/assets/x.html'], Helpers::links($document, $this->base));
+    }
+
+    /**
+     * Finding 2: baseUrl() must resolve relative <base href> correctly with ../ paths.
+     */
+    public function testHonoursRelativeBaseHrefWithParentDir(): void
+    {
+        $document = new Document(
+            '<html><head><base href="../assets/"></head>'
+            . '<body><a href="y.html">y</a></body></html>'
+        );
+
+        self::assertSame(['https://example.com/assets/y.html'], Helpers::links($document, $this->base));
+    }
 }

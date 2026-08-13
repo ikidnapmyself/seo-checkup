@@ -38,7 +38,7 @@ final class Helpers
             $values[$element->getAttribute($attr)] = true;
         }
 
-        return array_keys($values);
+        return array_map('strval', array_keys($values));
     }
 
     public static function whitespace(string $input): string
@@ -55,10 +55,19 @@ final class Helpers
                 continue;
             }
 
+            // Try to parse as absolute URL first.
             try {
                 return Url::fromString($href);
             } catch (InvalidUrlException) {
-                return $fallback;
+                // If it fails, try to resolve as relative against the fallback.
+                $resolved = UrlResolver::resolve($fallback, $href);
+                if ($resolved !== null) {
+                    try {
+                        return Url::fromString($resolved);
+                    } catch (InvalidUrlException) {
+                        // Fall through to return fallback.
+                    }
+                }
             }
         }
 
