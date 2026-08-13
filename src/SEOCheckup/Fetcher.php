@@ -46,6 +46,12 @@ final class Fetcher
         $redirects = 0;
 
         while (true) {
+            // Validated up front so a malformed target (the initial URL, or a
+            // malformed relative redirect target) fails as InvalidUrlException
+            // here, rather than reaching the request factory's own URI parser.
+            $currentUrl = Url::fromString($target);
+            $target     = (string) $currentUrl;
+
             $request = $this->requests->createRequest('GET', $target)
                 ->withHeader('User-Agent', self::USER_AGENT);
 
@@ -70,7 +76,7 @@ final class Fetcher
                 return $response;
             }
 
-            $next = UrlResolver::resolve(Url::fromString($target), $location);
+            $next = UrlResolver::resolve($currentUrl, $location);
 
             if ($next === null) {
                 return $response;

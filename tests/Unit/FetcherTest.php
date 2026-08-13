@@ -97,4 +97,28 @@ final class FetcherTest extends TestCase
 
         (new Fetcher($client))->get('https://example.com/');
     }
+
+    public function testStatusReturnsZeroOnMalformedUrlInsteadOfThrowing(): void
+    {
+        $client = new FakeHttpClient();
+
+        self::assertSame(0, (new Fetcher($client))->status('http://exa mple.com/'));
+    }
+
+    public function testBodyReturnsEmptyStringOnMalformedUrlInsteadOfThrowing(): void
+    {
+        $client = new FakeHttpClient();
+
+        self::assertSame('', (new Fetcher($client))->body('http://host:abc/'));
+    }
+
+    public function testGetReturnsTheLastResponseWhenRedirectTargetFailsToParse(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/', '', 302, ['Location' => 'http://exa mple.com/']);
+
+        $response = (new Fetcher($client))->get('https://example.com/');
+
+        self::assertSame(302, $response->getStatusCode());
+    }
 }
