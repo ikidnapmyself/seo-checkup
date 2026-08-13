@@ -109,10 +109,9 @@ final class HelpersTest extends TestCase
         $result = Helpers::attributes($document, 'img', 'src');
         self::assertSame(['123', '0', '007'], $result);
 
-        // Verify every element is actually a string, not an int.
-        foreach ($result as $value) {
-            self::assertIsString($value, "Expected string, got " . gettype($value));
-        }
+        // Verify every element is actually a string at runtime, not an int
+        // produced by PHP's numeric array-key coercion.
+        self::assertSame(['string', 'string', 'string'], array_map('gettype', $result));
     }
 
     /**

@@ -84,7 +84,7 @@ final class FetcherTest extends TestCase
 
     public function testSendsAUserAgent(): void
     {
-        $client = new class extends FakeHttpClient {
+        $client = new class () extends FakeHttpClient {
             public ?Request $lastRequest = null;
 
             public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface

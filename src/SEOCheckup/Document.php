@@ -4,6 +4,7 @@ namespace SEOCheckup;
 
 use DOMDocument;
 use DOMNodeList;
+use DOMText;
 use DOMXPath;
 
 final class Document
@@ -72,6 +73,12 @@ final class Document
         $text = '';
 
         foreach ($nodes as $node) {
+            // The expression selects text nodes; the instanceof keeps the
+            // DOMNameSpaceNode arm of DOMXPath::query()'s union out of the way.
+            if (!$node instanceof DOMText) {
+                continue;
+            }
+
             $text .= $node->textContent . ' ';
         }
 

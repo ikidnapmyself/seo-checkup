@@ -37,7 +37,10 @@ final class UrlResolver
             }
         }
 
-        [$path, $query] = array_pad(explode('?', $href, 2), 2, null);
+        // explode() always yields at least one element, so $path is a string.
+        $parts = explode('?', $href, 2);
+        $path  = $parts[0];
+        $query = $parts[1] ?? null;
 
         $path = str_starts_with($path, '/')
             ? $path

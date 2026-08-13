@@ -1,265 +1,226 @@
 <?php
+
 namespace SEOCheckup;
+
+use DOMComment;
+use Psr\Http\Client\ClientInterface;
+use SEOCheckup\Exception\RequestFailedException;
 
 /**
  * @package seo-checkup
- * @author  Burak <burak@myself.com>
+ * @author  Burak
  */
-
-use DOMDocument;
-use DOMXPath;
-
-class Analyze extends PreRequirements
+class Analyze
 {
+    private readonly Fetcher $fetcher;
+
+    private readonly DnsLookup $dns;
+
+    private readonly PageContext $page;
+
+    private readonly Document $document;
+
+    /** @var array<int, array<string, mixed>>|null */
+    private ?array $dnsRecords = null;
 
     /**
-     * @var array $data
+     * @throws Exception\InvalidUrlException
+     * @throws RequestFailedException
      */
-    private $data;
-
-
-    /**
-     * @var Helpers $helpers
-     */
-    private $helpers;
-
-    /**
-     * @var DOMDocument $dom
-     */
-    private $dom;
-
-    /**
-     * Initialize from URL via Guzzle
-     *
-     * @param string $url
-     * @return $this
-     */
-    public function __construct($url)
+    public function __construct(string $url, ?ClientInterface $http = null, ?DnsLookup $dns = null)
     {
-        $started_on    = microtime(true);
-        $response      = $this->Request($url);
+        $parsed  = Url::fromString($url);
+        $this->fetcher = new Fetcher($http);
+        $this->dns     = $dns ?? new SystemDnsLookup();
 
-        $parsed_url    = parse_url($url);
-        $dns_recods    = (array) @dns_get_record($parsed_url['host']);
+        $startedOn = microtime(true);
+        $response  = $this->fetcher->get($url);
+        $duration  = microtime(true) - $startedOn;
 
-        $this->data    = [
-            'url'         => $url,
-            'parsed_url'  => $parsed_url,
-            'status'      => $response->getStatusCode(),
-            'headers'     => $response->getHeaders(),
-            'page_speed'  => number_format(( microtime(true) - $started_on), 4),
-            'dns_records' => $dns_recods,
-            'content'     => $response->getBody()->getContents()
-        ];
+        // PSR-7 types header values as array<string>; PageContext wants lists.
+        $headers = array_map(array_values(...), $response->getHeaders());
 
-        $this->helpers = new Helpers($this->data);
+        $this->page = new PageContext(
+            $url,
+            $parsed,
+            $response->getStatusCode(),
+            $headers,
+            (string) $response->getBody(),
+            $duration,
+        );
 
-        return $this;
+        $this->document = new Document($this->page->body);
     }
 
     /**
-     * Initialize DOMDocument
+     * DNS is only looked up when a check actually needs it.
      *
-     * @return DOMDocument
+     * @return array<int, array<string, mixed>>
      */
-    private function DOMDocument()
+    private function dnsRecords(): array
     {
-        libxml_use_internal_errors(true);
-
-        $this->dom = new DOMDocument();
-
-        return $this->dom;
+        return $this->dnsRecords ??= $this->dns->txtRecords($this->page->parsed->host);
     }
 
     /**
-     * Initialize DOMXPath
-     *
-     * @return DOMXPath
+     * @return array{url: string, status: int, headers: array<string, list<string>>, service: string, time: int, data: mixed}
      */
-    private function DOMXPath()
-    {
-        return new DOMXPath($this->dom);
-    }
-
-    /**
-     * Standardizes output
-     *
-     * @param mixed $return
-     * @param string $service
-     * @return array
-     */
-    private function Output($return, $service)
+    private function output(mixed $data, string $service): array
     {
         return [
-            'url'       => $this->data['url'],
-            'status'    => $this->data['status'],
-            'headers'   => $this->data['headers'],
-            'service'   => preg_replace("([A-Z])", " $0", $service),
-            'time'      => time(),
-            'data'      => $return
+            'url'     => $this->page->url,
+            'status'  => $this->page->status,
+            'headers' => $this->page->headers,
+            'service' => self::label($service),
+            'time'    => time(),
+            'data'    => $data,
         ];
+    }
+
+    /**
+     * "brokenLinks" becomes "Broken Links".
+     */
+    private static function label(string $method): string
+    {
+        return ucfirst(trim((string) preg_replace('/(?<!^)[A-Z]/', ' $0', $method)));
     }
 
     /**
      * Analyze Broken Links in a page
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function BrokenLinks()
+    public function brokenLinks(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $links = Helpers::links($this->document, $this->page->parsed);
+        $scan  = ['errors' => [], 'passed' => []];
+        $i     = 0;
 
-        $links  = $this->helpers->Links($dom)->GetLinks();
-        $scan   = ['errors' => [], 'passed' => []];
-        $i      = 0;
-
-        foreach ($links as $key => $link)
-        {
+        foreach ($links as $link) {
             $i++;
 
-            if($i >= 25)
+            if ($i >= 25) {
                 break;
+            }
 
-            $status = $this->Request($link)->getStatusCode();
+            $status = $this->fetcher->status($link);
 
-            if(substr($status,0,1) > 3 && $status != 999)
+            if (substr((string) $status, 0, 1) > 3 && $status != 999) {
                 $scan['errors']["HTTP {$status}"][] = $link;
-            else
+            } else {
                 $scan['passed']["HTTP {$status}"][] = $link;
+            }
         }
-        return $this->Output([
+
+        return $this->output([
             'links'   => $links,
-            'scanned' => $scan
+            'scanned' => $scan,
         ], __FUNCTION__);
     }
 
     /**
      * Checks header parameters if there is something about cache
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Cache()
+    public function cache(): array
     {
         $output = ['headers' => [], 'html' => []];
 
-        foreach ($this->data['headers'] as $header)
-        {
-            foreach ($header as $item)
-            {
-                if(strpos(mb_strtolower($item),'cache') !== false)
-                {
+        foreach ($this->page->headers as $header) {
+            foreach ($header as $item) {
+                if (strpos(mb_strtolower($item), 'cache') !== false) {
                     $output['headers'][] = $item;
                 }
             }
         }
 
-        $dom   = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-        $xpath = $this->DOMXPath();
+        $comments = $this->document->xpath()->query('//comment()');
 
-        foreach ($xpath->query('//comment()') as $comment)
-        {
-            if(strpos(mb_strtolower($comment->textContent),'cache') !== false)
-            {
-                $output['html'][] = '<!-- '.trim($comment->textContent).' //-->';
+        if ($comments !== false) {
+            foreach ($comments as $comment) {
+                // The expression selects comment nodes; the instanceof keeps the
+                // DOMNameSpaceNode arm of DOMXPath::query()'s union out of the way.
+                if (!$comment instanceof DOMComment) {
+                    continue;
+                }
+
+                if (strpos(mb_strtolower($comment->textContent), 'cache') !== false) {
+                    $output['html'][] = '<!-- ' . trim($comment->textContent) . ' //-->';
+                }
             }
         }
-        return $this->Output($output, __FUNCTION__);
+
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks canonical tag
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function CanonicalTag()
+    public function canonicalTag(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-        $output = array();
-        $links  = $this->helpers->GetAttributes($dom, 'link', 'rel');
+        $output = [];
+        $links  = Helpers::attributes($this->document, 'link', 'rel');
 
-        foreach($links as $item)
-        {
-            if($item == 'canonical')
-            {
+        foreach ($links as $item) {
+            if ($item == 'canonical') {
                 $output[] = $item;
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Determines character set from headers
      *
-     * @TODO: Use Regex instead of explode
-     * @return array
+     * @return array<string, mixed>
      */
-    public function CharacterSet()
+    public function characterSet(): array
     {
         $output = '';
 
-        foreach ($this->data['headers'] as $key => $header)
-        {
-            if($key == 'Content-Type')
-            {
-                $output = explode('=', explode(';',$header[0])[1])[1];
+        foreach ($this->page->headers as $key => $header) {
+            if ($key == 'Content-Type') {
+                $output = explode('=', explode(';', $header[0])[1])[1];
             }
         }
-        return $this->Output($output, __FUNCTION__);
+
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Calculates code / content percentage
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function CodeContent()
+    public function codeContent(): array
     {
-        $page_size = mb_strlen($this->data['content'], 'utf8');
-        $dom       = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-
-        $script    = $dom->getElementsByTagName('script');
-        $remove    = array();
-
-        foreach ($script as $item)
-        {
-            $remove[] = $item;
-        }
-
-        foreach ($remove as $item)
-        {
-            $item->parentNode->removeChild($item);
-        }
-
-        $page         = $dom->saveHTML();
-        $content_size = mb_strlen(strip_tags($page), 'utf8');
+        $page_size    = mb_strlen($this->page->body, 'utf8');
+        $page         = Helpers::whitespace($this->document->text());
+        $content_size = mb_strlen($page, 'utf8');
         $rate         = (round($content_size / $page_size * 100));
-        $output       = array(
-            'page_size'     => $page_size,
-            'code_size'     => ($page_size - $content_size),
-            'content_size'  => $content_size,
-            'content'       => $this->helpers->Whitespace(strip_tags($page)),
-            'percentage'    => "$rate%"
-        );
+        $output       = [
+            'page_size'    => $page_size,
+            'code_size'    => ($page_size - $content_size),
+            'content_size' => $content_size,
+            'content'      => $page,
+            'percentage'   => "$rate%",
+        ];
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks deprecated HTML tag usage
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function DeprecatedHTML()
+    public function deprecatedHtml(): array
     {
-        $dom       = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-
-        $deprecated_tags = array(
+        $deprecated_tags = [
             'acronym',
             'applet',
             'basefont',
@@ -274,546 +235,444 @@ class Analyze extends PreRequirements
             's',
             'strike',
             'tt',
-            'u'
-        );
+            'u',
+        ];
 
-        $output = array();
+        $output = [];
 
-        foreach ($deprecated_tags as $tag)
-        {
-            $tags   = $dom->getElementsByTagName($tag);
+        foreach ($deprecated_tags as $tag) {
+            $tags = $this->document->tags($tag);
 
-            if($tags->length > 0)
-            {
+            if ($tags->length > 0) {
                 $output[$tag] = $tags->length;
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Determines length of the domain
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function DomainLength()
+    public function domainLength(): array
     {
-        $domain = explode('.',$this->data['parsed_url']['host']);
+        $domain = explode('.', $this->page->parsed->host);
 
         array_pop($domain);
 
-        $domain = implode('.',$domain);
+        $domain = implode('.', $domain);
 
-        return $this->Output(strlen($domain), __FUNCTION__);
+        return $this->output(strlen($domain), __FUNCTION__);
     }
 
     /**
      * Looks for a favicon
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Favicon()
+    public function favicon(): array
     {
-        $ico    = "{$this->data['parsed_url']['scheme']}://{$this->data['parsed_url']['host']}/favicon.ico";
-        $link   = '';
+        $ico  = "{$this->page->parsed->scheme}://{$this->page->parsed->host}/favicon.ico";
+        $link = '';
 
-        if($this->Request($ico)->getStatusCode() === 200)
-        {
-            $link   = $ico;
+        if ($this->fetcher->status($ico) === 200) {
+            $link = $ico;
         } else {
+            $tags = $this->document->tags('link');
+            $fav  = '';
 
-            $dom    = $this->DOMDocument();
-            $dom->loadHTML($this->data['content']);
-
-            $tags   = $dom->getElementsByTagName('link');
-            $fav    = null;
-
-            foreach ($tags as $tag)
-            {
-                if($tag->getAttribute('rel') == 'shortcut icon' OR $tag->getAttribute('rel') == 'icon')
-                {
+            foreach ($tags as $tag) {
+                if ($tag->getAttribute('rel') == 'shortcut icon' || $tag->getAttribute('rel') == 'icon') {
                     $fav = $tag->getAttribute('href');
                     break;
                 }
             }
 
-            if (!filter_var($fav, FILTER_VALIDATE_URL) === false && $this->Request($fav)->getStatusCode() == 200)
-            {
+            $value = (string) ($_GET['value'] ?? '');
+
+            if (!filter_var($fav, FILTER_VALIDATE_URL) === false && $this->fetcher->status($fav) == 200) {
                 $link = $fav;
-            } else if($this->Request($this->data['parsed_url']['scheme'].'://'.$this->data['parsed_url']['host'].'/'.$fav)->getStatusCode() == 200)
-            {
-                $link = $this->data['parsed_url']['scheme'].'://'.$this->data['parsed_url']['host'].'/'.$fav;
-            } else if($this->Request($_GET['value'].'/'.$fav)->getStatusCode() == 200)
-            {
-                $link = $_GET['value'].'/'.$fav;
+            } elseif ($this->fetcher->status($this->page->parsed->scheme . '://' . $this->page->parsed->host . '/' . $fav) == 200) {
+                $link = $this->page->parsed->scheme . '://' . $this->page->parsed->host . '/' . $fav;
+            } elseif ($this->fetcher->status($value . '/' . $fav) == 200) {
+                $link = $value . '/' . $fav;
             } else {
                 $link = '';
             }
         }
 
-
-        return $this->Output($link, __FUNCTION__);
+        return $this->output($link, __FUNCTION__);
     }
 
     /**
      * Checks if there is a frame in the page
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Frameset()
+    public function frameset(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-
-        $tags   = $dom->getElementsByTagName('frameset');
+        $tags   = $this->document->tags('frameset');
         $output = ['frameset' => [], 'frame' => []];
-        foreach ($tags as $tag)
-        {
+
+        foreach ($tags as $tag) {
             $output['frameset'][] = null;
         }
 
-        $tags   = $dom->getElementsByTagName('frame');
-        foreach ($tags as $tag)
-        {
+        $tags = $this->document->tags('frame');
+
+        foreach ($tags as $tag) {
             $output['frame'][] = null;
         }
 
-        return $this->Output([
+        return $this->output([
             'frameset' => count($output['frameset']),
-            'frame'    => count($output['frame'])
+            'frame'    => count($output['frame']),
         ], __FUNCTION__);
     }
 
     /**
      * Finds Google Analytics code
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function GoogleAnalytics()
+    public function googleAnalytics(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-
         $script = '';
 
-        $tags   = $dom->getElementsByTagName('script');
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('src'))
-            {
-                if (0 === strpos($tag->getAttribute('src'), '//'))
-                {
-                    $href     = $this->data['parsed_url']['scheme'] . ':'.$tag->getAttribute('src');
-                } else if (0 !== strpos($tag->getAttribute('src'), 'http'))
-                {
-                    $path     = '/' . ltrim($tag->getAttribute('src'), '/');
-                    $href     = $this->data['parsed_url']['scheme'] . '://';
+        $tags = $this->document->tags('script');
 
-                    if (isset($this->data['parsed_url']['user']) && isset($this->data['parsed_url']['pass']))
-                    {
-                        $href .= $this->data['parsed_url']['user'] . ':' . $this->data['parsed_url']['pass'] . '@';
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('src')) {
+                if (0 === strpos($tag->getAttribute('src'), '//')) {
+                    $href = $this->page->parsed->scheme . ':' . $tag->getAttribute('src');
+                } elseif (0 !== strpos($tag->getAttribute('src'), 'http')) {
+                    $path = '/' . ltrim($tag->getAttribute('src'), '/');
+                    $href = $this->page->parsed->scheme . '://';
+
+                    $href .= $this->page->parsed->host;
+
+                    if ($this->page->parsed->port !== null) {
+                        $href .= ':' . $this->page->parsed->port;
                     }
 
-                    $href     .= $this->data['parsed_url']['host'];
-
-                    if (isset($this->data['parsed_url']['port']))
-                    {
-                        $href .= ':' . $this->data['parsed_url']['port'];
-                    }
-                    $href    .= $path;
+                    $href .= $path;
                 } else {
-                    $href     = $tag->getAttribute('src');
+                    $href = $tag->getAttribute('src');
                 }
 
-                $script .= $this->Request($href)->getBody()->getContents();
+                $script .= $this->fetcher->body($href);
             } else {
                 $script .= $tag->nodeValue;
             }
         }
 
-        $ua_regex        = "/UA-[0-9]{5,}-[0-9]{1,}/";
+        $ua_regex = "/UA-[0-9]{5,}-[0-9]{1,}/";
 
         preg_match_all($ua_regex, $script, $ua_id);
 
-        return $this->Output($ua_id[0][0], __FUNCTION__);
+        return $this->output($ua_id[0][0], __FUNCTION__);
     }
 
     /**
      * Checks h1 HTML tag usage
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Header1()
+    public function header1(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('h1');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('h1');
-        $output = array();
-        foreach ($tags as $tag)
-        {
+        foreach ($tags as $tag) {
             $output[] = $tag->nodeValue;
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks h2 HTML tag usage
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Header2()
+    public function header2(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('h2');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('h2');
-        $output = array();
-        foreach ($tags as $tag)
-        {
+        foreach ($tags as $tag) {
             $output[] = $tag->nodeValue;
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks HTTPS
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function Https()
+    public function https(): array
     {
-        $https = ($this->data['parsed_url']['scheme'] === 'https') ? true : false;
+        $https = ($this->page->parsed->scheme === 'https') ? true : false;
 
-        return $this->Output($https, __FUNCTION__);
+        return $this->output($https, __FUNCTION__);
     }
 
     /**
      * Checks empty image alts
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function ImageAlt()
+    public function imageAlt(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('img');
+        $images = [];
+        $errors = [];
 
-        $tags         = $dom->getElementsByTagName('img');
-        $images       = array();
-        $errors       = array();
+        foreach ($tags as $item) {
+            $src = $item->getAttribute('src');
+            $alt = $item->getAttribute('alt');
 
-        foreach($tags as $item)
-        {
-            $src      = $item->getAttribute('src');
-            $alt      = $item->getAttribute('alt');
-
-            $images[] = array(
+            $images[] = [
                 'src' => $src,
-                'alt' => $alt
-            );
+                'alt' => $alt,
+            ];
 
-            if($alt == '')
-            {
+            if ($alt == '') {
                 $link = $src;
 
                 $errors[] = $link;
             }
         }
 
-        $output       = array(
-            'images'        => $images,
-            'without_alt'   => $errors
-        );
+        $output = [
+            'images'      => $images,
+            'without_alt' => $errors,
+        ];
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Gets inbound links
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function InboundLinks()
+    public function inboundLinks(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('a');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('a');
-        $output = array();
-
-        foreach($tags as $item)
-        {
+        foreach ($tags as $item) {
             $link = $item->getAttribute('href');
 
-            if($link != '' && strpos($link,'#') !== 0)
-            {
-                $link = parse_url($link);
+            if ($link != '' && strpos($link, '#') !== 0) {
+                $link = (array) parse_url($link);
 
-                if(!isset($link['scheme']))
-                {
-                    $link['scheme'] = $this->data['parsed_url']['scheme'];
+                if (!isset($link['scheme'])) {
+                    $link['scheme'] = $this->page->parsed->scheme;
                 }
 
-                if(!isset($link['host']))
-                {
-                    $link['host'] = $this->data['parsed_url']['host'];
+                if (!isset($link['host'])) {
+                    $link['host'] = $this->page->parsed->host;
                 }
 
-                if(!isset($link['path']))
-                {
+                if (!isset($link['path'])) {
                     $link['path'] = '';
                 } else {
-                    if(strpos($link['path'],'/') === false)
-                    {
-                        $link['path'] = '/'.$link['path'];
+                    if (strpos($link['path'], '/') === false) {
+                        $link['path'] = '/' . $link['path'];
                     }
                 }
 
-                if(!isset($link['query']))
-                {
+                if (!isset($link['query'])) {
                     $link['query'] = '';
                 } else {
-                    $link['query'] = '?'.$link['query'];
+                    $link['query'] = '?' . $link['query'];
                 }
 
-                $output[] = $link['scheme'].'://'.$link['host'].$link['path'].$link['query'];
+                $output[] = $link['scheme'] . '://' . $link['host'] . $link['path'] . $link['query'];
             }
         }
 
-        foreach ($output as $key => $link)
-        {
-            if (parse_url($link)['host'] != $this->data['parsed_url']['host']) {
+        foreach ($output as $key => $link) {
+            if (parse_url($link, PHP_URL_HOST) != $this->page->parsed->host) {
                 unset($output[$key]);
                 continue;
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
-     * Gets inbound links
+     * Gets inline css
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function InlineCss()
+    public function inlineCss(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('style');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('style');
-        $output = array();
-
-        foreach($tags as $item)
-        {
-            $output[] = $this->helpers->Whitespace($item->textContent);
+        foreach ($tags as $item) {
+            $output[] = Helpers::whitespace($item->textContent);
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Gets meta description
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function MetaDescription()
+    public function metaDescription(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-        $tags   = $dom->getElementsByTagName('meta');
+        $tags   = $this->document->tags('meta');
         $output = '';
-        foreach ($tags as $tag)
-        {
+
+        foreach ($tags as $tag) {
             $content = $tag->getAttribute('content');
-            if(strtolower($tag->getAttribute('name')) == 'description' && strlen($content) > 0)
-            {
+
+            if (strtolower($tag->getAttribute('name')) == 'description' && strlen($content) > 0) {
                 $output = $content;
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Gets meta title
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function MetaTitle()
+    public function metaTitle(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
-        $tags   = $dom->getElementsByTagName('title');
+        $tags   = $this->document->tags('title');
         $output = '';
-        foreach ($tags as $tag)
-        {
-            if(isset($tag->nodeValue) && strlen($tag->nodeValue) > 0)
-            {
+
+        foreach ($tags as $tag) {
+            if (isset($tag->nodeValue) && strlen($tag->nodeValue) > 0) {
                 $output = $tag->nodeValue;
             }
             break;
         }
 
-
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Gets no-follow tag
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function NofollowTag()
+    public function nofollowTag(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('meta');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('meta');
-        $output = array();
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('name') == 'robots')
-            {
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('name') == 'robots') {
                 $output[] = $tag->getAttribute('content');
             }
         }
 
-        return $this->Output(in_array('nofollow',$output), __FUNCTION__);
+        return $this->output(in_array('nofollow', $output), __FUNCTION__);
     }
 
     /**
      * Gets no-index tag
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function NoindexTag()
+    public function noindexTag(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $tags   = $this->document->tags('meta');
+        $output = [];
 
-        $tags   = $dom->getElementsByTagName('meta');
-        $output = array();
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('name') == 'robots')
-            {
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('name') == 'robots') {
                 $output[] = $tag->getAttribute('content');
             }
         }
 
-        return $this->Output(in_array('noindex',$output), __FUNCTION__);
+        return $this->output(in_array('noindex', $output), __FUNCTION__);
     }
 
     /**
      * Counts objects in a page
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function ObjectCount()
+    public function objectCount(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $output = [
+            'css'    => [],
+            'script' => [],
+            'img'    => [],
+        ];
 
-        $output = array(
-            'css'    => array(),
-            'script' => array(),
-            'img'    => array()
-        );
+        $tags = $this->document->tags('link');
 
-        $tags   = $dom->getElementsByTagName('link');
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('type') == 'text/css' OR $tag->getAttribute('rel') == 'stylesheet')
-            {
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('type') == 'text/css' || $tag->getAttribute('rel') == 'stylesheet') {
                 $output['css'][] = $tag->getAttribute('href');
             }
         }
-        $output['css']   = array_unique($output['css']);
+        $output['css'] = array_unique($output['css']);
 
-        $tags   = $dom->getElementsByTagName('script');
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('src') != '')
-            {
+        $tags = $this->document->tags('script');
+
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('src') != '') {
                 $output['script'][] = $tag->getAttribute('src');
             }
         }
         $output['script'] = array_unique($output['script']);
 
-        $tags   = $dom->getElementsByTagName('img');
-        foreach ($tags as $tag)
-        {
-            if($tag->getAttribute('src') != '')
-            {
+        $tags = $this->document->tags('img');
+
+        foreach ($tags as $tag) {
+            if ($tag->getAttribute('src') != '') {
                 $output['img'][] = $tag->getAttribute('src');
             }
         }
-        $output['img']   = array_unique($output['img']);
+        $output['img'] = array_unique($output['img']);
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Calculates page speed
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function PageSpeed()
+    public function pageSpeed(): array
     {
-        return $this->Output($this->data['page_speed'], __FUNCTION__);
+        return $this->output(number_format($this->page->fetchDuration, 4), __FUNCTION__);
     }
 
     /**
      * Checks if there is some plaintext email
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function PlaintextEmail()
+    public function plaintextEmail(): array
     {
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $page = Helpers::whitespace($this->document->text());
+        $page = explode(' ', $page);
 
-        $script = $dom->getElementsByTagName('script');
-        $remove = array();
+        $output = [];
 
-        foreach($script as $item)
-        {
-            $remove[] = $item;
-        }
-
-        foreach ($remove as $item)
-        {
-            $item->parentNode->removeChild($item);
-        }
-        $style        = $dom->getElementsByTagName('style');
-        $remove       = array();
-
-        foreach($style as $item)
-        {
-            $remove[] = $item;
-        }
-
-        foreach ($remove as $item)
-        {
-            $item->parentNode->removeChild($item);
-        }
-
-        $page   = $dom->saveHTML();
-        $page   = trim(preg_replace('/<[^>]*>/', ' ', $page));
-        $page   = preg_replace('/\s+/', ' ',$page);
-        $page   = explode(' ',$page);
-
-        $output = array();
-        foreach ($page as $item)
-        {
+        foreach ($page as $item) {
             $item = trim($item);
 
-            if($item != '' && strpos($item,'@') !== false)
-            {
+            if ($item != '' && strpos($item, '@') !== false) {
                 if (!filter_var($item, FILTER_VALIDATE_EMAIL) === false) {
                     $output[] = $item;
                 }
@@ -822,154 +681,132 @@ class Analyze extends PreRequirements
 
         $output = array_unique($output);
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks HTML page compression
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function PageCompression()
+    public function pageCompression(): array
     {
-        $output               = array();
+        $compressed = gzcompress($this->page->body, 9);
 
-        $output['actual']     = round(strlen($this->data['content']) / 1024,2);
-        $output['possible']   = gzcompress($this->data['content'], 9);
-        $output['possible']   = round(strlen($output['possible']) / 1024,2);
-        $output['percentage'] = round((($output['possible'] * 100) / $output['actual']),2);
-        $output['difference'] = round($output['actual'] - $output['possible'],2);
+        $output               = [];
+        $output['actual']     = round(strlen($this->page->body) / 1024, 2);
+        $output['possible']   = round(strlen((string) $compressed) / 1024, 2);
+        $output['percentage'] = round((($output['possible'] * 100) / $output['actual']), 2);
+        $output['difference'] = round($output['actual'] - $output['possible'], 2);
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Checks robots.txt
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function RobotsFile()
+    public function robotsFile(): array
     {
-        $output = $this->Request("{$this->data['parsed_url']['scheme']}://{$this->data['parsed_url']['host']}/robots.txt");
+        $url    = "{$this->page->parsed->scheme}://{$this->page->parsed->host}/robots.txt";
+        $output = $this->fetcher->status($url) === 200 ? $this->fetcher->body($url) : false;
 
-        if($output->getStatusCode() === 200)
-        {
-            $output = $output->getBody()->getContents();
-        } else {
-            $output = false;
-        }
-
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Server signature
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function ServerSignature()
+    public function serverSignature(): array
     {
-        $output = array();
-        $danger = array(
+        $output = [];
+        $danger = [
             'server',
-            'powered'
-        );
+            'powered',
+        ];
 
-        foreach ($this->data['headers'] as $key => $header)
-        {
-            foreach ($danger as $check)
-            {
-                if(strpos(mb_strtolower($key),$check) !== false || strpos(mb_strtolower($header[0]),$check) !== false)
-                {
+        foreach ($this->page->headers as $key => $header) {
+            foreach ($danger as $check) {
+                if (strpos(mb_strtolower($key), $check) !== false || strpos(mb_strtolower($header[0]), $check) !== false) {
                     $output[$key] = $header[0];
                 }
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Social media accounts
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function SocialMedia()
+    public function socialMedia(): array
     {
-        $socials = array(
+        $socials = [
             'Facebook' => 'facebook.com',
             'Twitter'  => 'twitter.com',
             'LinkedIn' => 'linkedin.com',
             'YouTube'  => 'youtube.com',
-            'GitHub'   => 'github.com'
-        );
+            'GitHub'   => 'github.com',
+        ];
 
-        $output = array();
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $output = [];
+        $links  = Helpers::links($this->document, $this->page->parsed);
 
-        $links  = $this->helpers->Links($dom)->GetLinks();
-
-        foreach($links as $link)
-        {
-            foreach ($socials as $key => $social)
-            {
-                if(strpos($link, $social) !== false)
-                {
+        foreach ($links as $link) {
+            foreach ($socials as $key => $social) {
+                if (strpos($link, $social) !== false) {
                     $output[$key][] = $link;
                 }
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * SPF record
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function SpfRecord()
+    public function spfRecord(): array
     {
-        $output = array();
-        foreach ($this->data['dns_records'] as $record)
-        {
-            if (strtoupper($record['type']) == 'TXT' && strpos($record['txt'],'spf') !== false)
-            {
+        $output = [];
+
+        foreach ($this->dnsRecords() as $record) {
+            if (strtoupper((string) $record['type']) == 'TXT' && strpos((string) $record['txt'], 'spf') !== false) {
                 $output[] = $record['txt'];
             }
-
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
      * Underscored links
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function UnderscoredLinks()
+    public function underscoredLinks(): array
     {
-        $output = array();
-        $dom    = $this->DOMDocument();
-        $dom->loadHTML($this->data['content']);
+        $output = [];
+        $links  = Helpers::links($this->document, $this->page->parsed);
 
-        $links  = $this->helpers->Links($dom)->GetLinks();
-        foreach($links as $link)
-        {
+        foreach ($links as $link) {
             $_link = $link;
-            $link  = parse_url($link);
+            $link  = (array) parse_url($link);
 
-            if(count($link) && (!isset($link['host']) OR $link['host'] == $this->data['parsed_url']['host']))
-            {
-                if(strpos($_link,'_') !== false)
-                {
+            if (count($link) && (!isset($link['host']) || $link['host'] == $this->page->parsed->host)) {
+                if (strpos($_link, '_') !== false) {
                     $output[] = $_link;
                 }
             }
         }
 
-        return $this->Output($output, __FUNCTION__);
+        return $this->output($output, __FUNCTION__);
     }
 }
