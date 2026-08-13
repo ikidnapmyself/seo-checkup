@@ -119,7 +119,7 @@ class Analyze
     }
 
     /**
-     * Checks header parameters if there is something about cache
+     * Anything cache-related in the headers or in HTML comments.
      *
      * @return array<string, mixed>
      */
@@ -127,10 +127,10 @@ class Analyze
     {
         $output = ['headers' => [], 'html' => []];
 
-        foreach ($this->page->headers as $header) {
-            foreach ($header as $item) {
-                if (strpos(mb_strtolower($item), 'cache') !== false) {
-                    $output['headers'][] = $item;
+        foreach ($this->page->headers as $key => $values) {
+            foreach ($values as $value) {
+                if (str_contains(mb_strtolower($key . ' ' . $value), 'cache')) {
+                    $output['headers'][] = $value;
                 }
             }
         }
@@ -139,13 +139,11 @@ class Analyze
 
         if ($comments !== false) {
             foreach ($comments as $comment) {
-                // The expression selects comment nodes; the instanceof keeps the
-                // DOMNameSpaceNode arm of DOMXPath::query()'s union out of the way.
                 if (!$comment instanceof DOMComment) {
                     continue;
                 }
 
-                if (strpos(mb_strtolower($comment->textContent), 'cache') !== false) {
+                if (str_contains(mb_strtolower($comment->textContent), 'cache')) {
                     $output['html'][] = '<!-- ' . trim($comment->textContent) . ' //-->';
                 }
             }
@@ -174,18 +172,17 @@ class Analyze
     }
 
     /**
-     * Determines character set from headers
+     * Determines character set from the Content-Type header.
      *
      * @return array<string, mixed>
      */
     public function characterSet(): array
     {
-        $output = '';
+        $contentType = $this->page->headerLine('Content-Type');
+        $output      = '';
 
-        foreach ($this->page->headers as $key => $header) {
-            if ($key == 'Content-Type') {
-                $output = explode('=', explode(';', $header[0])[1])[1];
-            }
+        if (preg_match('/charset\s*=\s*"?([^";,\s]+)"?/i', $contentType, $matches) === 1) {
+            $output = $matches[1];
         }
 
         return $this->output($output, __FUNCTION__);
@@ -720,18 +717,20 @@ class Analyze
      *
      * @return array<string, mixed>
      */
+    /**
+     * Headers that reveal the server stack.
+     *
+     * @return array<string, mixed>
+     */
     public function serverSignature(): array
     {
         $output = [];
-        $danger = [
-            'server',
-            'powered',
-        ];
+        $danger = ['server', 'powered'];
 
-        foreach ($this->page->headers as $key => $header) {
-            foreach ($danger as $check) {
-                if (strpos(mb_strtolower($key), $check) !== false || strpos(mb_strtolower($header[0]), $check) !== false) {
-                    $output[$key] = $header[0];
+        foreach ($this->page->headers as $key => $values) {
+            foreach ($danger as $needle) {
+                if (str_contains(strtolower($key), $needle)) {
+                    $output[$key] = $values[0] ?? '';
                 }
             }
         }
