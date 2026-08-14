@@ -40,8 +40,15 @@ class Analyze
 
         $response = $fetched->response;
 
-        // PSR-7 types header values as array<string>; PageContext wants lists.
-        $headers = array_map(array_values(...), $response->getHeaders());
+        // PSR-7 types getHeaders() as string[][], which says nothing about the
+        // key type; PageContext wants a string-keyed map of lists. Built by
+        // hand so the narrowing is real rather than asserted — PHP hands back
+        // an int key for a header name such as "123".
+        $headers = [];
+
+        foreach ($response->getHeaders() as $name => $values) {
+            $headers[(string) $name] = array_values($values);
+        }
 
         $this->page = new PageContext(
             $url,
@@ -93,7 +100,11 @@ class Analyze
     /**
      * Status of the first $limit links on the page.
      *
-     * 999 is LinkedIn's bot-block response, not a broken link.
+     * 999 is LinkedIn's bot-block response, not a broken link — unreachable
+     * with Guzzle's PSR-7 response; see DEFERRED.md.
+     *
+     * A non-positive $limit scans nothing. Passing it to array_slice() raw
+     * would mean "all but the last |$limit|" instead.
      *
      * @return array<string, mixed>
      */
@@ -102,7 +113,7 @@ class Analyze
         $links = Helpers::links($this->document, $this->page->parsed);
         $scan  = ['errors' => [], 'passed' => []];
 
-        foreach (array_slice($links, 0, $limit) as $link) {
+        foreach (array_slice($links, 0, max(0, $limit)) as $link) {
             $status = $this->fetcher->status($link);
             $bucket = ($status >= 400 && $status !== 999) || $status === 0 ? 'errors' : 'passed';
 

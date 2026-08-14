@@ -27,20 +27,6 @@ final class Helpers
         return array_keys($links);
     }
 
-    /**
-     * @return list<string>
-     */
-    public static function attributes(Document $document, string $tag = 'a', string $attr = 'href'): array
-    {
-        $values = [];
-
-        foreach ($document->tags($tag) as $element) {
-            $values[$element->getAttribute($attr)] = true;
-        }
-
-        return array_map('strval', array_keys($values));
-    }
-
     public static function whitespace(string $input): string
     {
         return preg_replace('!\s+!', ' ', $input) ?? $input;

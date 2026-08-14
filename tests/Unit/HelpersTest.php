@@ -78,40 +78,9 @@ final class HelpersTest extends TestCase
         self::assertSame(['https://example.com/x'], Helpers::links($document, $this->base));
     }
 
-    public function testCollectsUniqueAttributes(): void
-    {
-        $document = new Document(
-            '<html><body><img src="a.png"><img src="a.png"><img src="b.png"></body></html>'
-        );
-
-        self::assertSame(['a.png', 'b.png'], Helpers::attributes($document, 'img', 'src'));
-    }
-
     public function testCollapsesWhitespace(): void
     {
         self::assertSame(' a b ', Helpers::whitespace("\n a \t\t b \n"));
-    }
-
-    /**
-     * Finding 1: attributes() must return list<string>, not mixed types.
-     * Purely-numeric attribute values should not be coerced to integers.
-     */
-    public function testAttributesPreservesStringType(): void
-    {
-        $document = new Document(
-            '<html><body>'
-            . '<img src="123">'
-            . '<img src="0">'
-            . '<img src="007">'
-            . '</body></html>'
-        );
-
-        $result = Helpers::attributes($document, 'img', 'src');
-        self::assertSame(['123', '0', '007'], $result);
-
-        // Verify every element is actually a string at runtime, not an int
-        // produced by PHP's numeric array-key coercion.
-        self::assertSame(['string', 'string', 'string'], array_map('gettype', $result));
     }
 
     /**

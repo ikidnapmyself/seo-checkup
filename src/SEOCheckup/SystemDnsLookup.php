@@ -8,6 +8,24 @@ final class SystemDnsLookup implements DnsLookup
     {
         $records = @dns_get_record($host, DNS_TXT);
 
-        return $records === false ? [] : $records;
+        if ($records === false) {
+            return [];
+        }
+
+        // dns_get_record() is typed as returning bare arrays, so each record
+        // is rebuilt with string keys rather than asserted to have them.
+        $output = [];
+
+        foreach ($records as $record) {
+            $fields = [];
+
+            foreach ($record as $key => $value) {
+                $fields[(string) $key] = $value;
+            }
+
+            $output[] = $fields;
+        }
+
+        return $output;
     }
 }

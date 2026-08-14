@@ -82,6 +82,29 @@ final class FetcherTest extends TestCase
         self::assertSame('', (new Fetcher($client))->body('https://example.com/'));
     }
 
+    /**
+     * status() and body() are documented as total. Guzzle's StreamHandler
+     * path -- used when curl is unavailable -- rethrows a bare
+     * InvalidArgumentException from Response's constructor on an
+     * out-of-range status code, and that does not implement
+     * ClientExceptionInterface, so it escaped both methods.
+     */
+    public function testStatusReturnsZeroWhenTheClientThrowsABareInvalidArgument(): void
+    {
+        $client = new FakeHttpClient();
+        $client->failWith = new \InvalidArgumentException('Status code must be an integer value between 1xx and 5xx.');
+
+        self::assertSame(0, (new Fetcher($client))->status('https://example.com/'));
+    }
+
+    public function testBodyReturnsEmptyStringWhenTheClientThrowsABareInvalidArgument(): void
+    {
+        $client = new FakeHttpClient();
+        $client->failWith = new \InvalidArgumentException('Status code must be an integer value between 1xx and 5xx.');
+
+        self::assertSame('', (new Fetcher($client))->body('https://example.com/'));
+    }
+
     public function testSendsAUserAgent(): void
     {
         $client = new class () extends FakeHttpClient {

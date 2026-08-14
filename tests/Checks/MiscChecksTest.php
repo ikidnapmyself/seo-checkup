@@ -58,6 +58,13 @@ final class MiscChecksTest extends TestCase
      * Public Suffix List lands — that is a deferred item, asserted here so
      * the behaviour is pinned rather than accidental.
      *
+     * This test is not a regression test for defect 9's crash: it passes
+     * against the pre-fix revision too. The hostless-URL crash it was written
+     * for became structurally unreachable once Url::fromString() started
+     * rejecting URLs without a host, so no input reaching domainLength() can
+     * still trigger it. UrlTest::testRejectsUrlWithoutHost is where that
+     * crash is actually covered; what this test pins is the measurement rule.
+     *
      * @return list<array{string, int}>
      */
     public static function hosts(): array

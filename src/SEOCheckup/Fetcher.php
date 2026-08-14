@@ -91,24 +91,33 @@ final class Fetcher
 
     /**
      * Status code of a probe request, or 0 when it could not be made.
+     *
+     * InvalidArgumentException is caught alongside the library's own
+     * exceptions because Guzzle's StreamHandler -- the fallback when curl is
+     * unavailable -- rethrows a bare one from GuzzleHttp\Psr7\Response when a
+     * server answers with a status outside 100-599. It does not implement
+     * ClientExceptionInterface, so get() cannot convert it, and without this
+     * arm it would escape a method documented as total.
      */
     public function status(string $url): int
     {
         try {
             return $this->get($url)->response->getStatusCode();
-        } catch (RequestFailedException | Exception\InvalidUrlException) {
+        } catch (RequestFailedException | Exception\InvalidUrlException | \InvalidArgumentException) {
             return 0;
         }
     }
 
     /**
      * Body of a probe request, or an empty string when it could not be made.
+     *
+     * Catches the same set as status(), for the same reason.
      */
     public function body(string $url): string
     {
         try {
             return (string) $this->get($url)->response->getBody();
-        } catch (RequestFailedException | Exception\InvalidUrlException) {
+        } catch (RequestFailedException | Exception\InvalidUrlException | \InvalidArgumentException) {
             return '';
         }
     }

@@ -143,4 +143,33 @@ final class LinkChecksTest extends TestCase
         );
         self::assertCount(30, $analyze->brokenLinks(30)['data']['scanned']['passed']['HTTP 200']);
     }
+
+    /**
+     * A negative limit reached array_slice() unchanged, where it means "all
+     * but the last N" rather than "none".
+     *
+     * @return list<array{int}>
+     */
+    public static function nonPositiveLimits(): array
+    {
+        return [[0], [-1], [-30]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonPositiveLimits')]
+    public function testBrokenLinksScansNothingForANonPositiveLimit(int $limit): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/a', 'ok', 200)
+            ->route('https://example.com/b', 'ok', 200);
+
+        $analyze = AnalyzeFactory::make(
+            '<html><body><a href="/a">1</a><a href="/b">2</a></body></html>',
+            client: $client
+        );
+
+        $data = $analyze->brokenLinks($limit)['data'];
+
+        self::assertSame(['errors' => [], 'passed' => []], $data['scanned']);
+        self::assertSame(['https://example.com/a', 'https://example.com/b'], $data['links']);
+    }
 }
