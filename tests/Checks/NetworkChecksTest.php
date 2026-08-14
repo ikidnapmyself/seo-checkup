@@ -3,6 +3,7 @@
 namespace SEOCheckup\Tests\Checks;
 
 use PHPUnit\Framework\TestCase;
+use SEOCheckup\Exception\RequestFailedException;
 use SEOCheckup\Tests\Support\AnalyzeFactory;
 use SEOCheckup\Tests\Support\FakeHttpClient;
 
@@ -53,6 +54,52 @@ final class NetworkChecksTest extends TestCase
         self::assertSame('', $analyze->favicon()['data']);
     }
 
+    /**
+     * A broken first icon link must not stop the second, valid one from being tried.
+     */
+    public function testFaviconFallsBackToTheNextIconWhenTheFirstFails(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/good-icon.png', 'icon', 200);
+
+        $analyze = AnalyzeFactory::make(
+            '<html><head><link rel="icon" href="/bad-icon.png"><link rel="icon" href="/good-icon.png"></head></html>',
+            client: $client
+        );
+
+        self::assertSame('https://example.com/good-icon.png', $analyze->favicon()['data']);
+        self::assertContains('https://example.com/good-icon.png', $client->requested);
+    }
+
+    public function testFaviconIsEmptyWhenNoDeclaredIconResolves(): void
+    {
+        $analyze = AnalyzeFactory::make(
+            '<html><head><link rel="icon" href="/bad1.png"><link rel="icon" href="/bad2.png"></head></html>'
+        );
+
+        self::assertSame('', $analyze->favicon()['data']);
+    }
+
+    public function testFaviconRespectsTheCandidateLimit(): void
+    {
+        $html   = '<html><head>';
+        $client = new FakeHttpClient();
+
+        for ($i = 0; $i < 20; ++$i) {
+            $html .= sprintf('<link rel="icon" href="/icon%d.png">', $i);
+        }
+
+        $analyze = AnalyzeFactory::make($html . '</head></html>', client: $client);
+        $analyze->favicon();
+
+        $candidateRequests = array_filter(
+            $client->requested,
+            static fn (string $url): bool => str_contains($url, '.png')
+        );
+
+        self::assertLessThanOrEqual(\SEOCheckup\Analyze::FAVICON_CANDIDATE_LIMIT, count($candidateRequests));
+    }
+
     public function testRobotsFileReturnsItsContents(): void
     {
         $client = (new FakeHttpClient())
@@ -85,6 +132,16 @@ final class NetworkChecksTest extends TestCase
         );
 
         self::assertCount(1, $robotsRequests);
+    }
+
+    public function testRobotsFileReturnsFalseOnTransportFailure(): void
+    {
+        $client  = new FakeHttpClient();
+        $analyze = AnalyzeFactory::make('<html></html>', client: $client);
+
+        $client->failWith = new RequestFailedException('boom');
+
+        self::assertFalse($analyze->robotsFile()['data']);
     }
 
     public function testGoogleAnalyticsFindsAnInlineTrackingId(): void

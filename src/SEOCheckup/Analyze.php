@@ -266,6 +266,8 @@ class Analyze
         return $this->output(strlen($domain), __FUNCTION__);
     }
 
+    public const FAVICON_CANDIDATE_LIMIT = 5;
+
     /**
      * The page's favicon URL, or an empty string.
      *
@@ -281,8 +283,13 @@ class Analyze
 
         $base   = Helpers::baseUrl($this->document, $this->page->parsed);
         $output = '';
+        $probed = 0;
 
         foreach ($this->document->tags('link') as $link) {
+            if ($probed >= self::FAVICON_CANDIDATE_LIMIT) {
+                break;
+            }
+
             $rel = strtolower($link->getAttribute('rel'));
 
             if ($rel !== 'icon' && $rel !== 'shortcut icon') {
@@ -291,11 +298,16 @@ class Analyze
 
             $candidate = UrlResolver::resolve($base, $link->getAttribute('href'));
 
-            if ($candidate !== null && $this->fetcher->status($candidate) === 200) {
-                $output = $candidate;
+            if ($candidate === null) {
+                continue;
             }
 
-            break;
+            ++$probed;
+
+            if ($this->fetcher->status($candidate) === 200) {
+                $output = $candidate;
+                break;
+            }
         }
 
         return $this->output($output, __FUNCTION__);
