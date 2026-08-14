@@ -7,7 +7,6 @@ use GuzzleHttp\Psr7\HttpFactory;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
-use Psr\Http\Message\ResponseInterface;
 use SEOCheckup\Exception\RequestFailedException;
 
 final class Fetcher
@@ -38,9 +37,12 @@ final class Fetcher
     /**
      * A 4xx or 5xx is data here, not an error. Only transport failures throw.
      *
+     * Returns the response paired with the URL it was finally served from,
+     * which is the last hop of the redirect chain rather than $url.
+     *
      * @throws RequestFailedException
      */
-    public function get(string $url): ResponseInterface
+    public function get(string $url): Fetched
     {
         $target    = $url;
         $redirects = 0;
@@ -73,13 +75,13 @@ final class Fetcher
                 || $location === ''
                 || !in_array($response->getStatusCode(), [301, 302, 303, 307, 308], true)
             ) {
-                return $response;
+                return new Fetched($currentUrl, $response);
             }
 
             $next = UrlResolver::resolve($currentUrl, $location);
 
             if ($next === null) {
-                return $response;
+                return new Fetched($currentUrl, $response);
             }
 
             $target = $next;
@@ -93,7 +95,7 @@ final class Fetcher
     public function status(string $url): int
     {
         try {
-            return $this->get($url)->getStatusCode();
+            return $this->get($url)->response->getStatusCode();
         } catch (RequestFailedException | Exception\InvalidUrlException) {
             return 0;
         }
@@ -105,7 +107,7 @@ final class Fetcher
     public function body(string $url): string
     {
         try {
-            return (string) $this->get($url)->getBody();
+            return (string) $this->get($url)->response->getBody();
         } catch (RequestFailedException | Exception\InvalidUrlException) {
             return '';
         }

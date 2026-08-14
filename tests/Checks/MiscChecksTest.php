@@ -24,6 +24,35 @@ final class MiscChecksTest extends TestCase
     }
 
     /**
+     * Review finding "Important 1": http -> https is the most common redirect
+     * on the web, and the verdict has to describe the page that was served.
+     */
+    public function testHttpsReflectsTheFinalUrlAfterARedirect(): void
+    {
+        $analyze = self::redirected();
+
+        self::assertTrue($analyze->https()['data']);
+    }
+
+    /**
+     * The envelope's "url" stays the caller's own string: it answers "what did
+     * I ask for", while the checks reason about where the request landed.
+     */
+    public function testEnvelopeStillReportsTheRequestedUrlAfterARedirect(): void
+    {
+        self::assertSame('http://example.com/', self::redirected()->https()['url']);
+    }
+
+    private static function redirected(): Analyze
+    {
+        $client = (new FakeHttpClient())
+            ->route('http://example.com/', '', 301, ['Location' => 'https://www.example.com/home'])
+            ->route('https://www.example.com/home', '<html></html>', 200);
+
+        return new Analyze('http://example.com/', $client, new FakeDnsLookup());
+    }
+
+    /**
      * Spec defect 9: the length is measured on the host minus its last label.
      * Multi-label suffixes such as .co.uk are knowingly wrong until the
      * Public Suffix List lands — that is a deferred item, asserted here so

@@ -29,20 +29,23 @@ class Analyze
      */
     public function __construct(string $url, ?ClientInterface $http = null, ?DnsLookup $dns = null)
     {
-        $parsed  = Url::fromString($url);
+        // Fetcher::get() validates $url before it sends anything, so a
+        // malformed URL still fails as InvalidUrlException without a request.
         $this->fetcher = new Fetcher($http);
         $this->dns     = $dns ?? new SystemDnsLookup();
 
         $startedOn = microtime(true);
-        $response  = $this->fetcher->get($url);
+        $fetched   = $this->fetcher->get($url);
         $duration  = microtime(true) - $startedOn;
+
+        $response = $fetched->response;
 
         // PSR-7 types header values as array<string>; PageContext wants lists.
         $headers = array_map(array_values(...), $response->getHeaders());
 
         $this->page = new PageContext(
             $url,
-            $parsed,
+            $fetched->url,
             $response->getStatusCode(),
             $headers,
             (string) $response->getBody(),
@@ -671,7 +674,7 @@ class Analyze
         $url = $this->page->parsed->origin() . '/robots.txt';
 
         try {
-            $response = $this->fetcher->get($url);
+            $response = $this->fetcher->get($url)->response;
             $output   = $response->getStatusCode() === 200 ? (string) $response->getBody() : false;
         } catch (RequestFailedException) {
             $output = false;

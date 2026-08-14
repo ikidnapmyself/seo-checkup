@@ -5,10 +5,34 @@ namespace SEOCheckup\Tests\Checks;
 use PHPUnit\Framework\TestCase;
 use SEOCheckup\Analyze;
 use SEOCheckup\Tests\Support\AnalyzeFactory;
+use SEOCheckup\Tests\Support\FakeDnsLookup;
 use SEOCheckup\Tests\Support\FakeHttpClient;
 
 final class LinkChecksTest extends TestCase
 {
+    /**
+     * Review finding "Important 1": an apex -> www redirect moves the origin
+     * relative hrefs resolve against. Resolving against the requested URL
+     * invents links that do not exist.
+     */
+    public function testRelativeLinksResolveAgainstTheFinalUrlAfterARedirect(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('http://example.com/', '', 301, ['Location' => 'https://www.example.com/home/'])
+            ->route(
+                'https://www.example.com/home/',
+                '<html><body><a href="a">1</a></body></html>',
+                200
+            );
+
+        $analyze = new Analyze('http://example.com/', $client, new FakeDnsLookup());
+
+        self::assertSame(
+            ['https://www.example.com/home/a'],
+            array_values($analyze->inboundLinks()['data'])
+        );
+    }
+
     /**
      * Spec defect 5: the drifted resolver mangled document-relative paths.
      */
