@@ -111,6 +111,55 @@ final class UrlResolverTest extends TestCase
         );
     }
 
+    /**
+     * RFC 3986 section 5.3: a reference with an empty path and a query keeps
+     * the base path unchanged. `<a href="?page=2">` is standard pagination
+     * markup, and appending it to the base's directory invents a URL.
+     */
+    public function testQueryOnlyReferenceKeepsTheBasePath(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/post.html?page=2',
+            UrlResolver::resolve($this->base, '?page=2')
+        );
+    }
+
+    public function testQueryOnlyReferenceOnARootBaseKeepsTheRootPath(): void
+    {
+        self::assertSame(
+            'https://example.com/?page=2',
+            UrlResolver::resolve(Url::fromString('https://example.com/'), '?page=2')
+        );
+    }
+
+    public function testQueryOnlyReferenceKeepsADirectoryBasePath(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/?page=2',
+            UrlResolver::resolve(Url::fromString('https://example.com/blog/'), '?page=2')
+        );
+    }
+
+    public function testQueryOnlyReferenceDropsTheFragment(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/post.html?page=2',
+            UrlResolver::resolve($this->base, '?page=2#top')
+        );
+    }
+
+    /**
+     * A bare "?" carries no query, so RFC 3986 leaves the base path with an
+     * empty query rather than the base's own query string.
+     */
+    public function testBareQuestionMarkKeepsTheBasePathWithoutAQuery(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/post.html',
+            UrlResolver::resolve($this->base, '?')
+        );
+    }
+
     public function testRootEscapeIsNoOp(): void
     {
         self::assertSame(

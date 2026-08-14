@@ -42,11 +42,18 @@ final class UrlResolver
         $path  = $parts[0];
         $query = $parts[1] ?? null;
 
-        $path = str_starts_with($path, '/')
-            ? $path
-            : self::directoryOf($base->path) . $path;
+        if ($path === '' && $query !== null) {
+            // RFC 3986 section 5.3: a reference with an empty path takes the
+            // base path unchanged. "?page=2" is a new query on the same
+            // document, not a sibling of its directory.
+            $target = $base->path;
+        } elseif (str_starts_with($path, '/')) {
+            $target = self::removeDotSegments($path);
+        } else {
+            $target = self::removeDotSegments(self::directoryOf($base->path) . $path);
+        }
 
-        $resolved = $base->origin() . self::removeDotSegments($path);
+        $resolved = $base->origin() . $target;
 
         return $query === null || $query === '' ? $resolved : $resolved . '?' . $query;
     }
