@@ -68,9 +68,9 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 | `cache()` | `headers` (response header values mentioning "cache") and `html` (HTML comments mentioning "cache") |
 | `canonicalTag()` | The resolved absolute href of `<link rel="canonical">`, or `''` |
 | `characterSet()` | The charset parsed from the `Content-Type` header, or `''` |
-| `codeContent()` | `page_size`, `code_size`, `content_size` (bytes) and `percentage` — the ratio of visible text to page size |
+| `codeContent()` | `page_size`, `code_size`, `content_size` (bytes) and `percentage` — the ratio of visible text to page size — plus `content`: the page's full extracted visible text, which can be large |
 | `deprecatedHtml()` | A map of deprecated tag name to count, for tags found on the page |
-| `domainLength()` | Length of the host with its final label stripped (see Upgrading, below) |
+| `domainLength()` | Length of the host with its final label stripped. `example.co.uk` measures as `example.co` — correct registrable-domain extraction needs the Public Suffix List, which is a deferred dependency (see `DEFERRED.md`) |
 | `favicon()` | The resolved favicon URL that responded 200, or `''` |
 | `frameset()` | Counts of `<frameset>` and `<frame>` tags |
 | `googleAnalytics()` | The first Universal Analytics `UA-XXXXX-X` ID found in inline or external scripts, or `''` |
