@@ -192,25 +192,24 @@ class Analyze
     }
 
     /**
-     * Calculates code / content percentage
+     * Ratio of visible text to total page bytes.
      *
      * @return array<string, mixed>
      */
     public function codeContent(): array
     {
-        $page_size    = mb_strlen($this->page->body, 'utf8');
-        $page         = Helpers::whitespace($this->document->text());
-        $content_size = mb_strlen($page, 'utf8');
-        $rate         = (round($content_size / $page_size * 100));
-        $output       = [
-            'page_size'    => $page_size,
-            'code_size'    => ($page_size - $content_size),
-            'content_size' => $content_size,
-            'content'      => $page,
-            'percentage'   => "$rate%",
-        ];
+        $pageSize    = mb_strlen($this->page->body, 'utf8');
+        $content     = Helpers::whitespace($this->document->text());
+        $contentSize = mb_strlen($content, 'utf8');
+        $rate        = $pageSize === 0 ? 0 : (int) round($contentSize / $pageSize * 100);
 
-        return $this->output($output, __FUNCTION__);
+        return $this->output([
+            'page_size'    => $pageSize,
+            'code_size'    => max(0, $pageSize - $contentSize),
+            'content_size' => $contentSize,
+            'content'      => $content,
+            'percentage'   => "{$rate}%",
+        ], __FUNCTION__);
     }
 
     /**
@@ -619,48 +618,42 @@ class Analyze
     }
 
     /**
-     * Checks if there is some plaintext email
+     * Email addresses exposed as plain text.
      *
      * @return array<string, mixed>
      */
     public function plaintextEmail(): array
     {
-        $page = Helpers::whitespace($this->document->text());
-        $page = explode(' ', $page);
-
         $output = [];
 
-        foreach ($page as $item) {
-            $item = trim($item);
+        foreach (explode(' ', Helpers::whitespace($this->document->text())) as $word) {
+            $word = trim($word, " \t\n\r\0\x0B.,;:()<>[]\"'");
 
-            if ($item != '' && strpos($item, '@') !== false) {
-                if (!filter_var($item, FILTER_VALIDATE_EMAIL) === false) {
-                    $output[] = $item;
-                }
+            if ($word !== '' && filter_var($word, FILTER_VALIDATE_EMAIL) !== false) {
+                $output[$word] = true;
             }
         }
 
-        $output = array_unique($output);
-
-        return $this->output($output, __FUNCTION__);
+        return $this->output(array_keys($output), __FUNCTION__);
     }
 
     /**
-     * Checks HTML page compression
+     * How much smaller the HTML would be gzipped.
      *
      * @return array<string, mixed>
      */
     public function pageCompression(): array
     {
         $compressed = gzcompress($this->page->body, 9);
+        $actual     = round(strlen($this->page->body) / 1024, 2);
+        $possible   = $compressed === false ? $actual : round(strlen($compressed) / 1024, 2);
 
-        $output               = [];
-        $output['actual']     = round(strlen($this->page->body) / 1024, 2);
-        $output['possible']   = round(strlen((string) $compressed) / 1024, 2);
-        $output['percentage'] = round((($output['possible'] * 100) / $output['actual']), 2);
-        $output['difference'] = round($output['actual'] - $output['possible'], 2);
-
-        return $this->output($output, __FUNCTION__);
+        return $this->output([
+            'actual'     => $actual,
+            'possible'   => $possible,
+            'percentage' => $actual === 0.0 ? 0.0 : round(($possible * 100) / $actual, 2),
+            'difference' => round($actual - $possible, 2),
+        ], __FUNCTION__);
     }
 
     /**
