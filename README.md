@@ -46,7 +46,9 @@ Array
 )
 ```
 
-Every check returns the same envelope: `url` and `status` are the fetched page's, `headers` are the response headers, `service` is a human-readable label derived from the method name, `time` is a Unix timestamp of when the check ran, and `data` is the check's own result — the only field that differs from check to check.
+Every example in this README is real output, captured through the library's own test suite against the bundled fixture (`tests/fixtures/complete.html`) rather than against the live site in the snippet — so `data` shows the fixture's title, not what `example.com` serves.
+
+Every check returns the same envelope: `url` is the URL you asked for — the checks themselves reason about where the request finally landed, which differs whenever a redirect was followed — `status` is the fetched page's, `headers` are the response headers, `service` is a human-readable label derived from the method name, `time` is a Unix timestamp of when the check ran, and `data` is the check's own result — the only field that differs from check to check.
 
 ## Injecting a client
 
@@ -68,7 +70,7 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 | `cache()` | `headers` (response header values mentioning "cache") and `html` (HTML comments mentioning "cache") |
 | `canonicalTag()` | The resolved absolute href of `<link rel="canonical">`, or `''` |
 | `characterSet()` | The charset parsed from the `Content-Type` header, or `''` |
-| `codeContent()` | `page_size`, `code_size`, `content_size` (bytes) and `percentage` — the ratio of visible text to page size — plus `content`: the page's full extracted visible text, which can be large |
+| `codeContent()` | `page_size`, `code_size`, `content_size` (character counts, via `mb_strlen` — not bytes) and `percentage` — the ratio of visible text to page size — plus `content`: the page's full extracted visible text, which can be large |
 | `deprecatedHtml()` | A map of deprecated tag name to count, for tags found on the page |
 | `domainLength()` | Length of the host with its final label stripped. `example.co.uk` measures as `example.co` — correct registrable-domain extraction needs the Public Suffix List, which is a deferred dependency (see `DEFERRED.md`) |
 | `favicon()` | The resolved favicon URL that responded 200, or `''` |
@@ -108,6 +110,18 @@ SEOCheckup\Exception\InvalidUrlException: Only http and https URLs are supported
 ```
 
 Once construction succeeds, individual checks do not throw. A check that has nothing to report returns an empty value for its `data` — `''`, `false`, or an empty array, depending on the check — rather than raising an exception. `robotsFile()` and `favicon()`, for example, return `false` and `''` respectively when nothing is found, and network probes used inside checks (`brokenLinks()`, `favicon()`) treat an unreachable target as status `0` rather than propagating the failure.
+
+## Security
+
+Analyzing a page means fetching URLs that page controls. `brokenLinks()` probes the page's own links, `favicon()` probes its declared icon hrefs, and `googleAnalytics()` downloads its external scripts — all of them following redirects, and none of them restricting the host or IP that gets contacted. `brokenLinks()` then reports the status of every URL it probed.
+
+The consequence is worth stating plainly: a page you analyze can make this library issue requests to hosts you did not choose, including addresses inside your own network (`http://127.0.0.1:8080/`, `http://169.254.169.254/`, an internal hostname), and `brokenLinks()` hands the resulting statuses back to the caller. That is enough to enumerate what is reachable from wherever the analysis runs. Treat the URL you pass to `Analyze` as untrusted input, and do not run the library against arbitrary user-supplied URLs from inside a network you care about.
+
+The library ships no allowlist of its own, because the right policy depends on your network. The PSR-18 constructor argument is exactly where you install one: the client you inject sees every outgoing request, so a wrapping `ClientInterface` — or a Guzzle handler/middleware — can resolve the host, reject private and link-local ranges, pin an allowlist, or refuse redirects to hosts outside it, before the request goes out.
+
+```php
+$analyze = new SEOCheckup\Analyze('https://example.com', new MyHostAllowlistClient($guzzle));
+```
 
 ## Upgrading from 0.1
 
