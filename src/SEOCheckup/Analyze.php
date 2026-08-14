@@ -267,42 +267,38 @@ class Analyze
     }
 
     /**
-     * Looks for a favicon
+     * The page's favicon URL, or an empty string.
      *
      * @return array<string, mixed>
      */
     public function favicon(): array
     {
-        $ico  = "{$this->page->parsed->scheme}://{$this->page->parsed->host}/favicon.ico";
-        $link = '';
+        $root = $this->page->parsed->origin() . '/favicon.ico';
 
-        if ($this->fetcher->status($ico) === 200) {
-            $link = $ico;
-        } else {
-            $tags = $this->document->tags('link');
-            $fav  = '';
-
-            foreach ($tags as $tag) {
-                if ($tag->getAttribute('rel') == 'shortcut icon' || $tag->getAttribute('rel') == 'icon') {
-                    $fav = $tag->getAttribute('href');
-                    break;
-                }
-            }
-
-            $value = (string) ($_GET['value'] ?? '');
-
-            if (!filter_var($fav, FILTER_VALIDATE_URL) === false && $this->fetcher->status($fav) == 200) {
-                $link = $fav;
-            } elseif ($this->fetcher->status($this->page->parsed->scheme . '://' . $this->page->parsed->host . '/' . $fav) == 200) {
-                $link = $this->page->parsed->scheme . '://' . $this->page->parsed->host . '/' . $fav;
-            } elseif ($this->fetcher->status($value . '/' . $fav) == 200) {
-                $link = $value . '/' . $fav;
-            } else {
-                $link = '';
-            }
+        if ($this->fetcher->status($root) === 200) {
+            return $this->output($root, __FUNCTION__);
         }
 
-        return $this->output($link, __FUNCTION__);
+        $base   = Helpers::baseUrl($this->document, $this->page->parsed);
+        $output = '';
+
+        foreach ($this->document->tags('link') as $link) {
+            $rel = strtolower($link->getAttribute('rel'));
+
+            if ($rel !== 'icon' && $rel !== 'shortcut icon') {
+                continue;
+            }
+
+            $candidate = UrlResolver::resolve($base, $link->getAttribute('href'));
+
+            if ($candidate !== null && $this->fetcher->status($candidate) === 200) {
+                $output = $candidate;
+            }
+
+            break;
+        }
+
+        return $this->output($output, __FUNCTION__);
     }
 
     /**
@@ -318,47 +314,46 @@ class Analyze
         ], __FUNCTION__);
     }
 
+    public const EXTERNAL_SCRIPT_LIMIT = 10;
+
     /**
-     * Finds Google Analytics code
+     * Universal Analytics tracking ID, or an empty string.
+     *
+     * GA4 ("G-") and Tag Manager ("GTM-") detection is a deferred item.
      *
      * @return array<string, mixed>
      */
     public function googleAnalytics(): array
     {
-        $script = '';
+        $base    = Helpers::baseUrl($this->document, $this->page->parsed);
+        $script  = '';
+        $fetched = 0;
 
-        $tags = $this->document->tags('script');
+        foreach ($this->document->tags('script') as $tag) {
+            $src = $tag->getAttribute('src');
 
-        foreach ($tags as $tag) {
-            if ($tag->getAttribute('src')) {
-                if (0 === strpos($tag->getAttribute('src'), '//')) {
-                    $href = $this->page->parsed->scheme . ':' . $tag->getAttribute('src');
-                } elseif (0 !== strpos($tag->getAttribute('src'), 'http')) {
-                    $path = '/' . ltrim($tag->getAttribute('src'), '/');
-                    $href = $this->page->parsed->scheme . '://';
-
-                    $href .= $this->page->parsed->host;
-
-                    if ($this->page->parsed->port !== null) {
-                        $href .= ':' . $this->page->parsed->port;
-                    }
-
-                    $href .= $path;
-                } else {
-                    $href = $tag->getAttribute('src');
-                }
-
-                $script .= $this->fetcher->body($href);
-            } else {
-                $script .= $tag->nodeValue;
+            if ($src === '') {
+                $script .= $tag->nodeValue ?? '';
+                continue;
             }
+
+            if ($fetched >= self::EXTERNAL_SCRIPT_LIMIT) {
+                continue;
+            }
+
+            $resolved = UrlResolver::resolve($base, $src);
+
+            if ($resolved === null) {
+                continue;
+            }
+
+            ++$fetched;
+            $script .= $this->fetcher->body($resolved);
         }
 
-        $ua_regex = "/UA-[0-9]{5,}-[0-9]{1,}/";
+        preg_match('/UA-[0-9]{5,}-[0-9]+/', $script, $matches);
 
-        preg_match_all($ua_regex, $script, $ua_id);
-
-        return $this->output($ua_id[0][0], __FUNCTION__);
+        return $this->output($matches[0] ?? '', __FUNCTION__);
     }
 
     /**
@@ -663,8 +658,14 @@ class Analyze
      */
     public function robotsFile(): array
     {
-        $url    = "{$this->page->parsed->scheme}://{$this->page->parsed->host}/robots.txt";
-        $output = $this->fetcher->status($url) === 200 ? $this->fetcher->body($url) : false;
+        $url = $this->page->parsed->origin() . '/robots.txt';
+
+        try {
+            $response = $this->fetcher->get($url);
+            $output   = $response->getStatusCode() === 200 ? (string) $response->getBody() : false;
+        } catch (RequestFailedException) {
+            $output = false;
+        }
 
         return $this->output($output, __FUNCTION__);
     }
