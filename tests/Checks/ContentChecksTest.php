@@ -43,6 +43,23 @@ final class ContentChecksTest extends TestCase
         self::assertGreaterThan(0, $data['code_size']);
     }
 
+    /**
+     * Entity-derived angle brackets survive literally in the content field.
+     * Document::text() extracts text nodes only, so &lt;div&gt; becomes literal <div>.
+     * This is intentional: visible page text that looks like markup should be counted
+     * in the content ratio, not stripped away as if it were actual HTML.
+     */
+    public function testCodeContentPreservesEntityDerivedAngleBrackets(): void
+    {
+        $data = AnalyzeFactory::make(
+            '<html><body><p>Look at this: &lt;div class="x"&gt;hello&lt;/div&gt;</p></body></html>'
+        )->codeContent()['data'];
+
+        self::assertStringContainsString('<div class="x">', $data['content']);
+        self::assertStringContainsString('hello', $data['content']);
+        self::assertStringContainsString('</div>', $data['content']);
+    }
+
     public function testPageCompressionReportsSavings(): void
     {
         $data = AnalyzeFactory::make(
