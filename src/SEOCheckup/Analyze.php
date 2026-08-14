@@ -251,19 +251,20 @@ class Analyze
     }
 
     /**
-     * Determines length of the domain
+     * Length of the host without its final label.
+     *
+     * Multi-label public suffixes (".co.uk") are not handled: doing so needs
+     * the Public Suffix List, which is a deferred dependency.
      *
      * @return array<string, mixed>
      */
     public function domainLength(): array
     {
-        $domain = explode('.', $this->page->parsed->host);
+        $labels = explode('.', $this->page->parsed->host);
 
-        array_pop($domain);
+        array_pop($labels);
 
-        $domain = implode('.', $domain);
-
-        return $this->output(strlen($domain), __FUNCTION__);
+        return $this->output(strlen(implode('.', $labels)), __FUNCTION__);
     }
 
     public const FAVICON_CANDIDATE_LIMIT = 5;
@@ -403,15 +404,11 @@ class Analyze
     }
 
     /**
-     * Checks HTTPS
-     *
      * @return array<string, mixed>
      */
     public function https(): array
     {
-        $https = ($this->page->parsed->scheme === 'https') ? true : false;
-
-        return $this->output($https, __FUNCTION__);
+        return $this->output($this->page->parsed->scheme === 'https', __FUNCTION__);
     }
 
     /**
@@ -615,7 +612,8 @@ class Analyze
     }
 
     /**
-     * Calculates page speed
+     * Seconds spent fetching the document itself. DNS resolution is no longer
+     * included — it happens lazily, and only for spfRecord().
      *
      * @return array<string, mixed>
      */
@@ -733,7 +731,7 @@ class Analyze
     }
 
     /**
-     * SPF record
+     * SPF records published for the host.
      *
      * @return array<string, mixed>
      */
@@ -742,8 +740,11 @@ class Analyze
         $output = [];
 
         foreach ($this->dnsRecords() as $record) {
-            if (strtoupper((string) $record['type']) == 'TXT' && strpos((string) $record['txt'], 'spf') !== false) {
-                $output[] = $record['txt'];
+            $type = is_string($record['type'] ?? null) ? strtoupper($record['type']) : '';
+            $txt  = is_string($record['txt'] ?? null) ? $record['txt'] : '';
+
+            if ($type === 'TXT' && str_contains(strtolower($txt), 'spf')) {
+                $output[] = $txt;
             }
         }
 

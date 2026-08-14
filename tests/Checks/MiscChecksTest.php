@@ -1,0 +1,86 @@
+<?php
+
+namespace SEOCheckup\Tests\Checks;
+
+use PHPUnit\Framework\TestCase;
+use SEOCheckup\Analyze;
+use SEOCheckup\Tests\Support\AnalyzeFactory;
+use SEOCheckup\Tests\Support\FakeDnsLookup;
+use SEOCheckup\Tests\Support\FakeHttpClient;
+
+final class MiscChecksTest extends TestCase
+{
+    public function testHttpsIsTrueForAnHttpsUrl(): void
+    {
+        self::assertTrue(AnalyzeFactory::make('<html></html>')->https()['data']);
+    }
+
+    public function testHttpsIsFalseForAnHttpUrl(): void
+    {
+        $client  = (new FakeHttpClient())->route('http://example.com/', '<html></html>', 200);
+        $analyze = new Analyze('http://example.com/', $client, new FakeDnsLookup());
+
+        self::assertFalse($analyze->https()['data']);
+    }
+
+    /**
+     * Spec defect 9: the length is measured on the host minus its last label.
+     * Multi-label suffixes such as .co.uk are knowingly wrong until the
+     * Public Suffix List lands — that is a deferred item, asserted here so
+     * the behaviour is pinned rather than accidental.
+     *
+     * @return list<array{string, int}>
+     */
+    public static function hosts(): array
+    {
+        return [
+            ['https://example.com/', 7],      // "example"
+            ['https://www.example.com/', 11], // "www.example"
+            ['https://example.co.uk/', 10],   // "example.co" - documented limitation
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('hosts')]
+    public function testDomainLength(string $url, int $expected): void
+    {
+        $client  = (new FakeHttpClient())->route($url, '<html></html>', 200);
+        $analyze = new Analyze($url, $client, new FakeDnsLookup());
+
+        self::assertSame($expected, $analyze->domainLength()['data']);
+    }
+
+    public function testPageSpeedIsTheFetchDuration(): void
+    {
+        $speed = AnalyzeFactory::make('<html></html>')->pageSpeed()['data'];
+
+        self::assertMatchesRegularExpression('/^\d+\.\d{4}$/', $speed);
+    }
+
+    public function testSpfRecordReturnsMatchingTxtRecords(): void
+    {
+        $dns = new FakeDnsLookup([
+            ['type' => 'TXT', 'txt' => 'v=spf1 include:_spf.example.com ~all'],
+            ['type' => 'TXT', 'txt' => 'google-site-verification=abc'],
+        ]);
+
+        $analyze = AnalyzeFactory::make('<html></html>', dns: $dns);
+
+        self::assertSame(['v=spf1 include:_spf.example.com ~all'], $analyze->spfRecord()['data']);
+    }
+
+    public function testSpfRecordIsEmptyWithoutRecords(): void
+    {
+        self::assertSame([], AnalyzeFactory::make('<html></html>')->spfRecord()['data']);
+    }
+
+    public function testSpfRecordSurvivesMalformedRecords(): void
+    {
+        $dns = new FakeDnsLookup([
+            ['type' => 'TXT'],
+            ['txt' => 'v=spf1 -all'],
+            ['type' => 'MX', 'target' => 'mail.example.com'],
+        ]);
+
+        self::assertSame([], AnalyzeFactory::make('<html></html>', dns: $dns)->spfRecord()['data']);
+    }
+}
