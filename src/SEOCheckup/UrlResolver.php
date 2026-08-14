@@ -55,7 +55,9 @@ final class UrlResolver
 
         $resolved = $base->origin() . $target;
 
-        return $query === null || $query === '' ? $resolved : $resolved . '?' . $query;
+        // A defined-but-empty query keeps its "?" — RFC 3986 section 5.3
+        // recomposes it, and it is distinct from having no query at all.
+        return $query === null ? $resolved : $resolved . '?' . $query;
     }
 
     private static function directoryOf(string $path): string
@@ -84,7 +86,7 @@ final class UrlResolver
             } elseif (str_starts_with($inputBuffer, './')) {
                 $inputBuffer = substr($inputBuffer, 2);
             }
-            // B: If input begins with "/./" or is "/..", replace with "/"
+            // B: If input begins with "/./" or is "/.", replace with "/"
             elseif (str_starts_with($inputBuffer, '/./')) {
                 $inputBuffer = '/' . substr($inputBuffer, 3);
             } elseif ($inputBuffer === '/.') {

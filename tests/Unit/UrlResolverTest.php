@@ -149,14 +149,32 @@ final class UrlResolverTest extends TestCase
     }
 
     /**
-     * A bare "?" carries no query, so RFC 3986 leaves the base path with an
-     * empty query rather than the base's own query string.
+     * A bare "?" is a defined-but-empty query, which RFC 3986 section 5.3
+     * recomposes as a trailing "?" on the base path. It does not inherit the
+     * base's own query string, and it is distinct from having no query at
+     * all: some servers route /path and /path? differently.
      */
-    public function testBareQuestionMarkKeepsTheBasePathWithoutAQuery(): void
+    public function testBareQuestionMarkKeepsTheBasePathWithAnEmptyQuery(): void
     {
         self::assertSame(
-            'https://example.com/blog/post.html',
+            'https://example.com/blog/post.html?',
             UrlResolver::resolve($this->base, '?')
+        );
+    }
+
+    public function testRelativePathKeepsAnExplicitlyEmptyQuery(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/a?',
+            UrlResolver::resolve($this->base, 'a?')
+        );
+    }
+
+    public function testHrefWithNoQueryGainsNoQuestionMark(): void
+    {
+        self::assertSame(
+            'https://example.com/blog/a',
+            UrlResolver::resolve($this->base, 'a')
         );
     }
 

@@ -40,7 +40,10 @@ final class Fetcher
      * Returns the response paired with the URL it was finally served from,
      * which is the last hop of the redirect chain rather than $url.
      *
-     * @throws RequestFailedException
+     * @throws RequestFailedException on transport failure
+     * @throws Exception\InvalidUrlException if $url, or any redirect target
+     *                                       in the chain, is not a valid
+     *                                       http(s) URL
      */
     public function get(string $url): Fetched
     {
