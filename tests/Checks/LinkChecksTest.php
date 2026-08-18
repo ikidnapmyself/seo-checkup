@@ -108,6 +108,23 @@ final class LinkChecksTest extends TestCase
     }
 
     /**
+     * A link caught in a redirect loop is broken. It used to land in
+     * `passed` under "HTTP 302" because the fetcher returned the last 3xx.
+     */
+    public function testBrokenLinksReportsARedirectLoopAsAnError(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/loop', '', 302, ['Location' => '/loop']);
+
+        $analyze = AnalyzeFactory::make('<html><body><a href="/loop">1</a></body></html>', client: $client);
+
+        $scan = $analyze->brokenLinks()['data']['scanned'];
+
+        self::assertSame(['https://example.com/loop'], $scan['errors']['HTTP 0']);
+        self::assertSame([], $scan['passed']);
+    }
+
+    /**
      * Spec defect 10: 999 is LinkedIn's bot-block status, not a broken link.
      */
     public function testBrokenLinksTreats999AsPassed(): void

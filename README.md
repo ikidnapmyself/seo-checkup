@@ -101,7 +101,7 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 The constructor can throw:
 
 - `SEOCheckup\Exception\InvalidUrlException` — the URL is malformed, has no host, uses a scheme other than `http`/`https`, or the host/path fails validation.
-- `SEOCheckup\Exception\RequestFailedException` — the initial request could not be completed (DNS failure, connection refused, timeout, and so on).
+- `SEOCheckup\Exception\RequestFailedException` — the initial request could not be completed (DNS failure, connection refused, timeout, a redirect chain still going after `Fetcher::MAX_REDIRECTS` hops, and so on).
 
 A URL that merely needs encoding is not invalid: spaces and other characters RFC 3986 does not allow in a path or query are percent-encoded on the way out, exactly as a browser does. URL-embedded credentials (`https://user:pw@staging.example.com/`) are sent as Basic auth. Unicode hostnames are converted to punycode when **ext-intl** is installed; without it the raw hostname is handed to the transport as-is.
 

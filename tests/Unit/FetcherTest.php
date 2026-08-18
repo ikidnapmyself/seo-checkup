@@ -70,15 +70,32 @@ final class FetcherTest extends TestCase
         self::assertSame('authed', (string) $fetched->response->getBody());
     }
 
-    public function testStopsAtTheRedirectCapAndReturnsTheLastResponse(): void
+    /**
+     * A redirect that never terminates is a failed fetch, not a page: master's
+     * Guzzle threw TooManyRedirectsException, and returning the 3xx stub as
+     * "the page" let new Analyze() succeed with 29 checks run against it.
+     */
+    public function testThrowsWhenTheRedirectCapIsExhausted(): void
     {
         $client = (new FakeHttpClient())
             ->route('https://example.com/loop', '', 302, ['Location' => 'https://example.com/loop']);
 
-        $response = (new Fetcher($client))->get('https://example.com/loop')->response;
+        try {
+            (new Fetcher($client))->get('https://example.com/loop');
+            self::fail('Expected RequestFailedException');
+        } catch (RequestFailedException $e) {
+            self::assertStringContainsString('redirects', $e->getMessage());
+        }
 
-        self::assertSame(302, $response->getStatusCode());
         self::assertCount(Fetcher::MAX_REDIRECTS + 1, $client->requested);
+    }
+
+    public function testStatusReturnsZeroOnARedirectLoop(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/loop', '', 302, ['Location' => '/loop']);
+
+        self::assertSame(0, (new Fetcher($client))->status('https://example.com/loop'));
     }
 
     public function testGetThrowsOnTransportFailure(): void
@@ -195,7 +212,7 @@ final class FetcherTest extends TestCase
         self::assertSame('https://example.com/a', (string) (new Fetcher($client))->get('https://example.com/a')->url);
     }
 
-    public function testFinalUrlIsTheLastHopWhenTheRedirectCapIsHit(): void
+    public function testAChainOfExactlyMaxRedirectsIsStillFollowed(): void
     {
         $client = (new FakeHttpClient())
             ->route('https://example.com/1', '', 302, ['Location' => '/2'])
@@ -203,10 +220,31 @@ final class FetcherTest extends TestCase
             ->route('https://example.com/3', '', 302, ['Location' => '/4'])
             ->route('https://example.com/4', '', 302, ['Location' => '/5'])
             ->route('https://example.com/5', '', 302, ['Location' => '/6'])
-            ->route('https://example.com/6', '', 302, ['Location' => '/7']);
+            ->route('https://example.com/6', 'arrived', 200);
 
         $fetched = (new Fetcher($client))->get('https://example.com/1');
 
+        self::assertSame('https://example.com/6', (string) $fetched->url);
+        self::assertSame('arrived', (string) $fetched->response->getBody());
+    }
+
+    /**
+     * The last hop answering 3xx with a Location the resolver cannot use is
+     * a terminal response, not an exhausted cap: it is returned as-is.
+     */
+    public function testAnUnresolvableLocationAtTheCapIsReturnedNotThrown(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/1', '', 302, ['Location' => '/2'])
+            ->route('https://example.com/2', '', 302, ['Location' => '/3'])
+            ->route('https://example.com/3', '', 302, ['Location' => '/4'])
+            ->route('https://example.com/4', '', 302, ['Location' => '/5'])
+            ->route('https://example.com/5', '', 302, ['Location' => '/6'])
+            ->route('https://example.com/6', '', 302, ['Location' => 'mailto:x@example.com']);
+
+        $fetched = (new Fetcher($client))->get('https://example.com/1');
+
+        self::assertSame(302, $fetched->response->getStatusCode());
         self::assertSame('https://example.com/6', (string) $fetched->url);
     }
 }

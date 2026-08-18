@@ -40,7 +40,9 @@ final class Fetcher
      * Returns the response paired with the URL it was finally served from,
      * which is the last hop of the redirect chain rather than $url.
      *
-     * @throws RequestFailedException on transport failure
+     * @throws RequestFailedException on transport failure, or when the
+     *                                redirect chain is still going after
+     *                                MAX_REDIRECTS hops
      * @throws Exception\InvalidUrlException if $url is not a valid http(s)
      *                                       URL. Redirect targets never
      *                                       throw: UrlResolver returns an
@@ -76,8 +78,7 @@ final class Fetcher
             $location = $response->getHeaderLine('Location');
 
             if (
-                $redirects >= self::MAX_REDIRECTS
-                || $location === ''
+                $location === ''
                 || !in_array($response->getStatusCode(), [301, 302, 303, 307, 308], true)
             ) {
                 return new Fetched($currentUrl, $response);
@@ -85,8 +86,24 @@ final class Fetcher
 
             $next = UrlResolver::resolve($currentUrl, $location);
 
+            // A Location the resolver cannot use makes this a terminal
+            // response: there is nowhere to go, so it is the page.
             if ($next === null) {
                 return new Fetched($currentUrl, $response);
+            }
+
+            // A followable redirect once the cap is spent is a chain that did
+            // not terminate — a failed fetch, not a page. Returning the 3xx
+            // stub here would let every check run against it as if it were
+            // the document, and let brokenLinks() count a loop as passed.
+            if ($redirects >= self::MAX_REDIRECTS) {
+                throw new RequestFailedException(sprintf(
+                    'Request to "%s" failed: more than %d redirects (last hop "%s" -> "%s").',
+                    $url,
+                    self::MAX_REDIRECTS,
+                    $target,
+                    $next
+                ));
             }
 
             $target = $next;
