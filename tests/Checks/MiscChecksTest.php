@@ -104,6 +104,25 @@ final class MiscChecksTest extends TestCase
         self::assertSame(['v=spf1 include:_spf.example.com ~all'], $analyze->spfRecord()['data']);
     }
 
+    /**
+     * SPF is a property of the mail domain — normally the apex — not of
+     * wherever the web server redirected to. On the most common setup on
+     * the web, apex -> www, querying the served host reports "no SPF" for a
+     * domain that publishes one. Master queried the requested host.
+     */
+    public function testSpfRecordQueriesTheRequestedHostNotTheRedirectTarget(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/', '', 301, ['Location' => 'https://www.example.com/'])
+            ->route('https://www.example.com/', '<html></html>', 200);
+        $dns = new FakeDnsLookup([['type' => 'TXT', 'txt' => 'v=spf1 -all']]);
+
+        $analyze = new Analyze('https://example.com/', $client, $dns);
+
+        self::assertSame(['v=spf1 -all'], $analyze->spfRecord()['data']);
+        self::assertSame(['example.com'], $dns->queried);
+    }
+
     public function testSpfRecordIsEmptyWithoutRecords(): void
     {
         self::assertSame([], AnalyzeFactory::make('<html></html>')->spfRecord()['data']);

@@ -13,8 +13,13 @@ final class FakeDnsLookup implements DnsLookup
     {
     }
 
+    /** @var list<string> */
+    public array $queried = [];
+
     public function txtRecords(string $host): array
     {
+        $this->queried[] = $host;
+
         return $this->records;
     }
 }

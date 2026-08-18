@@ -11,7 +11,9 @@ final readonly class PageContext
      * envelope can answer "what did I request". $parsed is the URL the page
      * was actually served from — the last hop of the redirect chain — and is
      * what every check reasons about: the https verdict, the origin relative
-     * links resolve against, the host DNS and domainLength() are measured on.
+     * links resolve against, the host domainLength() is measured on. The one
+     * exception is DNS: spfRecord() queries the requested host, because SPF
+     * belongs to the mail domain, not to a redirect target.
      *
      * They differ on any redirect, which includes the two most common
      * configurations on the web: apex -> www and http -> https.

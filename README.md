@@ -93,7 +93,7 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 | `robotsFile()` | The body of `/robots.txt` if it responded 200, otherwise `false` |
 | `serverSignature()` | Response headers whose name or value contains "server" or "powered", keyed by header name |
 | `socialMedia()` | Links grouped by social network (Facebook, Twitter, LinkedIn, YouTube, GitHub) |
-| `spfRecord()` | TXT DNS records for the host that mention "spf" |
+| `spfRecord()` | TXT DNS records mentioning "spf" for the host you asked about (the requested host, not a redirect target — SPF belongs to the mail domain, normally the apex) |
 | `underscoredLinks()` | Same-host links containing an underscore |
 
 ## Errors

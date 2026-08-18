@@ -20,6 +20,14 @@ class Analyze
 
     private readonly Document $document;
 
+    /**
+     * The host the caller asked about, as opposed to $page->parsed, which
+     * is where the redirect chain landed. Only DNS reasons about it: SPF is
+     * a property of the mail domain — normally the apex — not of whatever
+     * host the web server redirected to.
+     */
+    private readonly Url $requested;
+
     /** @var array<int, array<string, mixed>>|null */
     private ?array $dnsRecords = null;
 
@@ -60,16 +68,20 @@ class Analyze
         );
 
         $this->document = new Document($this->page->body);
+
+        // Cannot throw here: get() already parsed and validated this string.
+        $this->requested = Url::fromString($url);
     }
 
     /**
-     * DNS is only looked up when a check actually needs it.
+     * DNS is only looked up when a check actually needs it, and it is looked
+     * up for the requested host, not the served one — see $requested.
      *
      * @return array<int, array<string, mixed>>
      */
     private function dnsRecords(): array
     {
-        return $this->dnsRecords ??= $this->dns->txtRecords($this->page->parsed->host);
+        return $this->dnsRecords ??= $this->dns->txtRecords($this->requested->host);
     }
 
     /**
@@ -756,7 +768,8 @@ class Analyze
     }
 
     /**
-     * SPF records published for the host.
+     * SPF records published for the requested host. On an apex -> www
+     * redirect that is the apex, which is where SPF lives.
      *
      * @return array<string, mixed>
      */
