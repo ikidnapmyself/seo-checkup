@@ -684,10 +684,13 @@ class Analyze
     {
         $url = $this->page->parsed->origin() . '/robots.txt';
 
+        // The only check that calls get() directly rather than the total
+        // status()/body(), so it catches the same set they do — see
+        // Fetcher::status() for why the bare InvalidArgumentException is there.
         try {
             $response = $this->fetcher->get($url)->response;
             $output   = $response->getStatusCode() === 200 ? (string) $response->getBody() : false;
-        } catch (RequestFailedException) {
+        } catch (RequestFailedException | Exception\InvalidUrlException | \InvalidArgumentException) {
             $output = false;
         }
 

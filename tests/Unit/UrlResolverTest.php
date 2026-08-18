@@ -178,6 +178,28 @@ final class UrlResolverTest extends TestCase
         );
     }
 
+    /**
+     * The relative branch used to concatenate origin + raw path unvalidated
+     * while the absolute branch round-tripped through Url and returned null,
+     * so the same browser-fetchable link got two different verdicts and the
+     * relative form later failed Url::fromString() inside Fetcher.
+     */
+    public function testPercentEncodesARelativeReference(): void
+    {
+        self::assertSame(
+            'https://example.com/annual%20report.pdf?q=a%20b',
+            UrlResolver::resolve($this->base, '/annual report.pdf?q=a b')
+        );
+    }
+
+    public function testPercentEncodesAnAbsoluteHrefInsteadOfDroppingIt(): void
+    {
+        self::assertSame(
+            'https://example.com/annual%20report.pdf',
+            UrlResolver::resolve($this->base, 'https://example.com/annual report.pdf')
+        );
+    }
+
     public function testRootEscapeIsNoOp(): void
     {
         self::assertSame(

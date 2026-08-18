@@ -43,6 +43,23 @@ final class FetcherTest extends TestCase
         self::assertSame('arrived', (string) (new Fetcher($client))->get('https://example.com/a')->response->getBody());
     }
 
+    /**
+     * A misconfigured server answering `Location: /robots new.txt` used to
+     * escape get() as InvalidUrlException on the next hop, breaking the
+     * "checks do not throw" contract. Guzzle on master encoded and followed.
+     */
+    public function testFollowsARelativeRedirectWithAnUnencodedSpace(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/robots.txt', '', 301, ['Location' => '/robots new.txt'])
+            ->route('https://example.com/robots%20new.txt', 'arrived', 200);
+
+        $fetched = (new Fetcher($client))->get('https://example.com/robots.txt');
+
+        self::assertSame('arrived', (string) $fetched->response->getBody());
+        self::assertSame('https://example.com/robots%20new.txt', (string) $fetched->url);
+    }
+
     public function testStopsAtTheRedirectCapAndReturnsTheLastResponse(): void
     {
         $client = (new FakeHttpClient())

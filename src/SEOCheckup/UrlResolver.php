@@ -53,11 +53,15 @@ final class UrlResolver
             $target = self::removeDotSegments(self::directoryOf($base->path) . $path);
         }
 
-        $resolved = $base->origin() . $target;
+        // Encoded here rather than round-tripped through Url::fromString(),
+        // which cannot represent the defined-but-empty query below. After
+        // encoding, a valid base plus this path and query is always a valid
+        // URL, so the two branches agree: nothing fetchable is dropped.
+        $resolved = $base->origin() . Url::encode($target);
 
         // A defined-but-empty query keeps its "?" — RFC 3986 section 5.3
         // recomposes it, and it is distinct from having no query at all.
-        return $query === null ? $resolved : $resolved . '?' . $query;
+        return $query === null ? $resolved : $resolved . '?' . Url::encode($query);
     }
 
     private static function directoryOf(string $path): string

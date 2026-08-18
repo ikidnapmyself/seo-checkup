@@ -41,9 +41,10 @@ final class Fetcher
      * which is the last hop of the redirect chain rather than $url.
      *
      * @throws RequestFailedException on transport failure
-     * @throws Exception\InvalidUrlException if $url, or any redirect target
-     *                                       in the chain, is not a valid
-     *                                       http(s) URL
+     * @throws Exception\InvalidUrlException if $url is not a valid http(s)
+     *                                       URL. Redirect targets never
+     *                                       throw: UrlResolver returns an
+     *                                       already-valid URL or null.
      */
     public function get(string $url): Fetched
     {
@@ -51,9 +52,10 @@ final class Fetcher
         $redirects = 0;
 
         while (true) {
-            // Validated up front so a malformed target (the initial URL, or a
-            // malformed relative redirect target) fails as InvalidUrlException
-            // here, rather than reaching the request factory's own URI parser.
+            // Validated up front so a malformed initial URL fails as
+            // InvalidUrlException here, rather than reaching the request
+            // factory's own URI parser. Later hops re-parse what
+            // UrlResolver already validated and encoded, so they cannot fail.
             $currentUrl = Url::fromString($target);
             $target     = (string) $currentUrl;
 

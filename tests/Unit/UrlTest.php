@@ -57,10 +57,33 @@ final class UrlTest extends TestCase
         Url::fromString('http://example .com/path');
     }
 
-    public function testRejectsPathWithSpace(): void
+    /**
+     * A space in the path is a browser-fetchable URL, not a malformed one:
+     * every client percent-encodes it on the way out. Rejecting it made the
+     * library stricter than the transport it fronts.
+     */
+    public function testPercentEncodesWhitespaceInThePath(): void
     {
-        $this->expectException(InvalidUrlException::class);
-        Url::fromString('https://example.com/path with space');
+        $url = Url::fromString('https://example.com/annual report.pdf');
+
+        self::assertSame('/annual%20report.pdf', $url->path);
+        self::assertSame('https://example.com/annual%20report.pdf', (string) $url);
+    }
+
+    public function testPercentEncodesWhitespaceInTheQuery(): void
+    {
+        self::assertSame('q=a%20b', Url::fromString('https://example.com/?q=a b')->query);
+    }
+
+    public function testDoesNotDoubleEncodeAnAlreadyEncodedPath(): void
+    {
+        self::assertSame('/a%20b/c%25zz', Url::fromString('https://example.com/a%20b/c%zz')->path);
+    }
+
+    public function testEncodeIsIdempotentAndLeavesReservedCharactersAlone(): void
+    {
+        self::assertSame('/p/a-b_c.d~e!$&\'()*+,;=:@%20', Url::encode('/p/a-b_c.d~e!$&\'()*+,;=:@ '));
+        self::assertSame('a%5B%5D=1&x=y', Url::encode(Url::encode('a[]=1&x=y')));
     }
 
     public function testAcceptsHostWithHyphensAndMultipleLabels(): void

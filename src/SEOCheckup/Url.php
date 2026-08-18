@@ -41,15 +41,31 @@ final readonly class Url implements Stringable
         $host = self::normalizeHost($parts['host']);
         self::validateHost($host, $url);
 
-        $path = $parts['path'] ?? '';
-        self::validatePath($path, $url);
+        $path = self::encode($parts['path'] ?? '');
 
         return new self(
             $scheme,
             $host,
             $parts['port'] ?? null,
             $path === '' ? '/' : $path,
-            $parts['query'] ?? '',
+            self::encode($parts['query'] ?? ''),
+        );
+    }
+
+    /**
+     * Percent-encodes whatever RFC 3986 does not allow in a path or query —
+     * a space, a bracket, a stray non-hex "%" — and leaves unreserved,
+     * sub-delimiter and already-encoded characters alone, so it is
+     * idempotent. This is what every browser and Guzzle's own Uri do on the
+     * way out; a URL that merely needs encoding is fetchable, not malformed.
+     * The character class matches GuzzleHttp\Psr7\Uri's.
+     */
+    public static function encode(string $component): string
+    {
+        return (string) preg_replace_callback(
+            '/(?:[^a-zA-Z0-9_\-.~!$&\'()*+,;=%:@\/?]++|%(?![A-Fa-f0-9]{2}))/',
+            static fn (array $match): string => rawurlencode($match[0]),
+            $component
         );
     }
 
@@ -108,14 +124,6 @@ final readonly class Url implements Stringable
 
         if (!preg_match('/^(?:' . $label . '\.)*' . $label . '\.?$/u', $host)) {
             throw new InvalidUrlException(sprintf('Invalid hostname format: "%s".', $url));
-        }
-    }
-
-    private static function validatePath(string $path, string $url): void
-    {
-        // Reject paths with whitespace
-        if (preg_match('/\s/', $path)) {
-            throw new InvalidUrlException(sprintf('Path contains whitespace: "%s".', $url));
         }
     }
 

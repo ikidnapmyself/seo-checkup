@@ -3,7 +3,7 @@
 namespace SEOCheckup\Tests\Checks;
 
 use PHPUnit\Framework\TestCase;
-use SEOCheckup\Exception\RequestFailedException;
+use Psr\Http\Client\ClientExceptionInterface;
 use SEOCheckup\Tests\Support\AnalyzeFactory;
 use SEOCheckup\Tests\Support\FakeHttpClient;
 
@@ -134,12 +134,43 @@ final class NetworkChecksTest extends TestCase
         self::assertCount(1, $robotsRequests);
     }
 
+    public function testRobotsFileFollowsARedirectWithAnUnencodedSpace(): void
+    {
+        $client = (new FakeHttpClient())
+            ->route('https://example.com/robots.txt', '', 302, ['Location' => '/robots new.txt'])
+            ->route('https://example.com/robots%20new.txt', "User-agent: *\nDisallow:", 200);
+
+        $analyze = AnalyzeFactory::make('<html></html>', client: $client);
+
+        self::assertStringContainsString('User-agent: *', $analyze->robotsFile()['data']);
+    }
+
     public function testRobotsFileReturnsFalseOnTransportFailure(): void
     {
         $client  = new FakeHttpClient();
         $analyze = AnalyzeFactory::make('<html></html>', client: $client);
 
-        $client->failWith = new RequestFailedException('boom');
+        // A real transport failure surfaces as a PSR-18 ClientExceptionInterface
+        // that Fetcher::get() converts; throwing RequestFailedException directly
+        // would bypass that conversion and not exercise the path.
+        $client->failWith = new class ('boom') extends \RuntimeException implements ClientExceptionInterface {
+        };
+
+        self::assertFalse($analyze->robotsFile()['data']);
+    }
+
+    /**
+     * Same hole Fetcher::status()/body() close: Guzzle's curl-less
+     * StreamHandler rethrows a bare InvalidArgumentException on an
+     * out-of-range status, and robotsFile() is the one check that calls
+     * get() directly rather than through those total wrappers.
+     */
+    public function testRobotsFileReturnsFalseWhenTheClientThrowsABareInvalidArgument(): void
+    {
+        $client  = new FakeHttpClient();
+        $analyze = AnalyzeFactory::make('<html></html>', client: $client);
+
+        $client->failWith = new \InvalidArgumentException('Status code must be an integer value between 1xx and 5xx.');
 
         self::assertFalse($analyze->robotsFile()['data']);
     }
