@@ -14,6 +14,8 @@ final class Document
 
     private ?DOMXPath $xpath = null;
 
+    private ?string $text = null;
+
     public function __construct(private readonly string $html)
     {
     }
@@ -123,7 +125,17 @@ final class Document
         return $this->dom()->getElementsByTagName($name);
     }
 
+    /**
+     * Visible text — every text node outside <script> and <style>. Walked
+     * once: codeContent() and plaintextEmail() both want it and the
+     * document never changes.
+     */
     public function text(): string
+    {
+        return $this->text ??= $this->walkText();
+    }
+
+    private function walkText(): string
     {
         $nodes = $this->xpath()->query(
             '//text()[not(ancestor::script) and not(ancestor::style)]'

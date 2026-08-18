@@ -31,6 +31,11 @@ class Analyze
     /** @var array<int, array<string, mixed>>|null */
     private ?array $dnsRecords = null;
 
+    /** @var list<string>|null */
+    private ?array $links = null;
+
+    private ?Url $base = null;
+
     /**
      * @throws Exception\InvalidUrlException
      * @throws RequestFailedException
@@ -85,6 +90,25 @@ class Analyze
     }
 
     /**
+     * The page's links are a pure function of an immutable document, and
+     * four checks want them; resolved once.
+     *
+     * @return list<string>
+     */
+    private function links(): array
+    {
+        return $this->links ??= Helpers::links($this->document, $this->page->parsed);
+    }
+
+    /**
+     * Likewise the <base href> scan, wanted by seven.
+     */
+    private function base(): Url
+    {
+        return $this->base ??= Helpers::baseUrl($this->document, $this->page->parsed);
+    }
+
+    /**
      * @return array{url: string, status: int, headers: array<string, list<string>>, service: string, time: int, data: mixed}
      */
     private function output(mixed $data, string $service): array
@@ -122,7 +146,7 @@ class Analyze
      */
     public function brokenLinks(int $limit = self::BROKEN_LINKS_LIMIT): array
     {
-        $links = Helpers::links($this->document, $this->page->parsed);
+        $links = $this->links();
         $scan  = ['errors' => [], 'passed' => []];
 
         foreach (array_slice($links, 0, max(0, $limit)) as $link) {
@@ -191,7 +215,7 @@ class Analyze
             }
 
             $resolved = UrlResolver::resolve(
-                Helpers::baseUrl($this->document, $this->page->parsed),
+                $this->base(),
                 $link->getAttribute('href')
             );
 
@@ -312,7 +336,7 @@ class Analyze
             return $this->output($root, __FUNCTION__);
         }
 
-        $base   = Helpers::baseUrl($this->document, $this->page->parsed);
+        $base   = $this->base();
         $output = '';
         $probed = 0;
 
@@ -368,7 +392,7 @@ class Analyze
      */
     public function googleAnalytics(): array
     {
-        $base    = Helpers::baseUrl($this->document, $this->page->parsed);
+        $base    = $this->base();
         $script  = '';
         $fetched = 0;
 
@@ -485,7 +509,7 @@ class Analyze
     {
         $output = [];
 
-        foreach (Helpers::links($this->document, $this->page->parsed) as $link) {
+        foreach ($this->links() as $link) {
             if (parse_url($link, PHP_URL_HOST) === $this->page->parsed->host) {
                 $output[] = $link;
             }
@@ -754,7 +778,7 @@ class Analyze
         ];
 
         $output = [];
-        $links  = Helpers::links($this->document, $this->page->parsed);
+        $links  = $this->links();
 
         foreach ($links as $link) {
             foreach ($socials as $key => $social) {
@@ -798,7 +822,7 @@ class Analyze
     {
         $output = [];
 
-        foreach (Helpers::links($this->document, $this->page->parsed) as $link) {
+        foreach ($this->links() as $link) {
             if (parse_url($link, PHP_URL_HOST) !== $this->page->parsed->host) {
                 continue;
             }
