@@ -38,7 +38,7 @@ final readonly class Url implements Stringable
             throw new InvalidUrlException(sprintf('URL has no host: "%s".', $url));
         }
 
-        $host = strtolower($parts['host']);
+        $host = self::normalizeHost($parts['host']);
         self::validateHost($host, $url);
 
         $path = $parts['path'] ?? '';
@@ -51,6 +51,29 @@ final readonly class Url implements Stringable
             $path === '' ? '/' : $path,
             $parts['query'] ?? '',
         );
+    }
+
+    /**
+     * Lower-cases the host and, when ext-intl is available, converts a
+     * Unicode (IDN) host to its punycode A-label so it can be looked up and
+     * sent on the wire. Without intl the U-label is kept as-is and left to
+     * the transport, which is what master did.
+     */
+    private static function normalizeHost(string $host): string
+    {
+        // Locale-insensitive since PHP 8.2: multibyte sequences pass through
+        // untouched, so this cannot corrupt a U-label.
+        $host = strtolower($host);
+
+        if (function_exists('idn_to_ascii') && preg_match('/[^\x00-\x7f]/', $host) === 1) {
+            $ascii = idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+
+            if ($ascii !== false) {
+                return $ascii;
+            }
+        }
+
+        return $host;
     }
 
     private static function validateHost(string $host, string $url): void
@@ -75,10 +98,15 @@ final readonly class Url implements Stringable
             return;
         }
 
-        // DNS labels: alphanumeric and hyphen, but not starting/ending with hyphen
-        // Allow multiple labels separated by dots
-        // Allow punycode (xn-- prefix)
-        if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $host)) {
+        // DNS labels: letters, digits and underscore, hyphens allowed inside
+        // but not at either end, dot-separated, optional trailing dot for a
+        // fully qualified name. Punycode (xn--) fits. Underscore is invalid
+        // per RFC 1123 but widely deployed and accepted by every transport
+        // this library sits on. \p{L}/\p{N} keeps a U-label acceptable when
+        // ext-intl is missing and normalizeHost() could not convert it.
+        $label = '[\p{L}\p{N}_](?:[\p{L}\p{N}_-]*[\p{L}\p{N}_])?';
+
+        if (!preg_match('/^(?:' . $label . '\.)*' . $label . '\.?$/u', $host)) {
             throw new InvalidUrlException(sprintf('Invalid hostname format: "%s".', $url));
         }
     }

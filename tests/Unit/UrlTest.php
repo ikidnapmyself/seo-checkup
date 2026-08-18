@@ -2,6 +2,7 @@
 
 namespace SEOCheckup\Tests\Unit;
 
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use SEOCheckup\Exception\InvalidUrlException;
 use SEOCheckup\Url;
@@ -67,5 +68,34 @@ final class UrlTest extends TestCase
         $url = Url::fromString('https://my-api.sub-domain.example.com/test');
 
         self::assertSame('my-api.sub-domain.example.com', $url->host);
+    }
+
+    /**
+     * Underscored labels are invalid per RFC 1123 but widely deployed
+     * (cdn_static.example.com); curl, browsers and Guzzle all fetch them.
+     */
+    public function testAcceptsUnderscoreInHostLabel(): void
+    {
+        self::assertSame('cdn_static.example.com', Url::fromString('https://cdn_static.example.com/x')->host);
+    }
+
+    public function testAcceptsFullyQualifiedHostWithTrailingDot(): void
+    {
+        self::assertSame('example.com.', Url::fromString('https://example.com./')->host);
+    }
+
+    #[RequiresPhpExtension('intl')]
+    public function testConvertsUnicodeHostToPunycode(): void
+    {
+        $url = Url::fromString('https://München.de/x');
+
+        self::assertSame('xn--mnchen-3ya.de', $url->host);
+        self::assertSame('https://xn--mnchen-3ya.de/x', (string) $url);
+    }
+
+    public function testStillRejectsLabelStartingWithHyphen(): void
+    {
+        $this->expectException(InvalidUrlException::class);
+        Url::fromString('https://-bad.example.com/');
     }
 }

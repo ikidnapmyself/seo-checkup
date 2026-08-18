@@ -20,6 +20,9 @@
         "psr/http-message": "^2.0",
         "guzzlehttp/guzzle": "^7.9"
     },
+    "suggest": {
+        "ext-intl": "To convert internationalized (Unicode) hostnames to punycode before fetching"
+    },
     "require-dev": {
         "phpunit/phpunit": "^12.0",
         "phpstan/phpstan": "^2.0",

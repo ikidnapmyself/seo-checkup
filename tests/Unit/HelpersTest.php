@@ -40,6 +40,32 @@ final class HelpersTest extends TestCase
     /**
      * Spec defect 6.
      */
+    /**
+     * Hosts the transport can fetch must not vanish from the link list:
+     * resolve() swallows InvalidUrlException, so an over-strict host check
+     * silently under-reports every link-based check.
+     */
+    #[\PHPUnit\Framework\Attributes\RequiresPhpExtension('intl')]
+    public function testKeepsIdnUnderscoredAndTrailingDotHosts(): void
+    {
+        $document = new Document(
+            '<html><body>'
+            . '<a href="https://münchen.de/">1</a>'
+            . '<a href="https://cdn_static.example.com/x">2</a>'
+            . '<a href="https://example.com./">3</a>'
+            . '</body></html>'
+        );
+
+        self::assertSame(
+            [
+                'https://xn--mnchen-3ya.de/',
+                'https://cdn_static.example.com/x',
+                'https://example.com./',
+            ],
+            Helpers::links($document, $this->base)
+        );
+    }
+
     public function testDropsNonHttpHrefs(): void
     {
         $document = new Document(
