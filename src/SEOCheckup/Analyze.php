@@ -314,7 +314,9 @@ class Analyze
      */
     public function domainLength(): array
     {
-        $labels = explode('.', $this->page->parsed->host);
+        // A fully qualified host's trailing dot is a root marker, not a label:
+        // without the trim it would be popped instead of the real TLD.
+        $labels = explode('.', rtrim($this->page->parsed->host, '.'));
 
         array_pop($labels);
 

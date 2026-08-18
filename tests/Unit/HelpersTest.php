@@ -38,9 +38,6 @@ final class HelpersTest extends TestCase
     }
 
     /**
-     * Spec defect 6.
-     */
-    /**
      * Hosts the transport can fetch must not vanish from the link list:
      * resolve() swallows InvalidUrlException, so an over-strict host check
      * silently under-reports every link-based check.
@@ -66,6 +63,9 @@ final class HelpersTest extends TestCase
         );
     }
 
+    /**
+     * Spec defect 6.
+     */
     public function testDropsNonHttpHrefs(): void
     {
         $document = new Document(

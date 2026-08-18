@@ -73,6 +73,7 @@ final class MiscChecksTest extends TestCase
             ['https://example.com/', 7],      // "example"
             ['https://www.example.com/', 11], // "www.example"
             ['https://example.co.uk/', 10],   // "example.co" - documented limitation
+            ['https://example.com./', 7],     // FQDN trailing dot is not a label
         ];
     }
 
