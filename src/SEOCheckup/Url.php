@@ -9,12 +9,17 @@ final readonly class Url implements Stringable
 {
     private const DEFAULT_PORTS = ['http' => 80, 'https' => 443];
 
+    /**
+     * @param string $userInfo "user" or "user:pass", percent-encoded, or ''
+     *                         when the URL carried no credentials
+     */
     public function __construct(
         public string $scheme,
         public string $host,
         public ?int $port,
         public string $path,
         public string $query,
+        public string $userInfo = '',
     ) {
     }
 
@@ -43,12 +48,22 @@ final readonly class Url implements Stringable
 
         $path = self::encode($parts['path'] ?? '');
 
+        // Kept so Fetcher sends URL-embedded Basic-auth credentials, as
+        // master did by handing the raw URL to Guzzle. parse_url() splits
+        // them out, so "@" cannot appear in either half.
+        $userInfo = self::encode($parts['user'] ?? '');
+
+        if (isset($parts['pass'])) {
+            $userInfo .= ':' . self::encode($parts['pass']);
+        }
+
         return new self(
             $scheme,
             $host,
             $parts['port'] ?? null,
             $path === '' ? '/' : $path,
             self::encode($parts['query'] ?? ''),
+            $userInfo,
         );
     }
 
@@ -127,19 +142,37 @@ final readonly class Url implements Stringable
         }
     }
 
+    /**
+     * scheme://host[:port] — the RFC 6454 origin, which by definition
+     * excludes credentials. This is what same-site comparisons and the
+     * well-known /robots.txt and /favicon.ico probes are built on.
+     */
     public function origin(): string
     {
-        $origin = $this->scheme . '://' . $this->host;
+        return $this->scheme . '://' . $this->hostAndPort();
+    }
 
+    /**
+     * [userinfo@]host[:port] — the RFC 3986 authority, which a relative
+     * reference inherits whole (section 5.2.2), credentials included.
+     */
+    public function authority(): string
+    {
+        return ($this->userInfo === '' ? '' : $this->userInfo . '@') . $this->hostAndPort();
+    }
+
+    private function hostAndPort(): string
+    {
         if ($this->port !== null && $this->port !== self::DEFAULT_PORTS[$this->scheme]) {
-            $origin .= ':' . $this->port;
+            return $this->host . ':' . $this->port;
         }
 
-        return $origin;
+        return $this->host;
     }
 
     public function __toString(): string
     {
-        return $this->origin() . $this->path . ($this->query === '' ? '' : '?' . $this->query);
+        return $this->scheme . '://' . $this->authority()
+            . $this->path . ($this->query === '' ? '' : '?' . $this->query);
     }
 }

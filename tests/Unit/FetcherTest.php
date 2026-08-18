@@ -60,6 +60,16 @@ final class FetcherTest extends TestCase
         self::assertSame('https://example.com/robots%20new.txt', (string) $fetched->url);
     }
 
+    public function testSendsUrlEmbeddedCredentials(): void
+    {
+        $client = (new FakeHttpClient())->route('https://user:pw@example.com/', 'authed', 200);
+
+        $fetched = (new Fetcher($client))->get('https://user:pw@example.com/');
+
+        self::assertSame(['https://user:pw@example.com/'], $client->requested);
+        self::assertSame('authed', (string) $fetched->response->getBody());
+    }
+
     public function testStopsAtTheRedirectCapAndReturnsTheLastResponse(): void
     {
         $client = (new FakeHttpClient())

@@ -57,7 +57,10 @@ final class UrlResolver
         // which cannot represent the defined-but-empty query below. After
         // encoding, a valid base plus this path and query is always a valid
         // URL, so the two branches agree: nothing fetchable is dropped.
-        $resolved = $base->origin() . Url::encode($target);
+        // The base's whole authority is inherited, credentials included
+        // (RFC 3986 section 5.2.2), so a relative Location on an
+        // authenticated page keeps working.
+        $resolved = $base->scheme . '://' . $base->authority() . Url::encode($target);
 
         // A defined-but-empty query keeps its "?" — RFC 3986 section 5.3
         // recomposes it, and it is distinct from having no query at all.

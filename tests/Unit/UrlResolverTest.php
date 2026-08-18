@@ -200,6 +200,19 @@ final class UrlResolverTest extends TestCase
         );
     }
 
+    /**
+     * RFC 3986 section 5.2.2: a relative reference takes the base's whole
+     * authority, credentials included — which is also what a relative
+     * Location header on an authenticated page needs to keep working.
+     */
+    public function testRelativeReferenceKeepsTheBaseCredentials(): void
+    {
+        self::assertSame(
+            'https://user:pw@example.com/b',
+            UrlResolver::resolve(Url::fromString('https://user:pw@example.com/a/'), '/b')
+        );
+    }
+
     public function testRootEscapeIsNoOp(): void
     {
         self::assertSame(

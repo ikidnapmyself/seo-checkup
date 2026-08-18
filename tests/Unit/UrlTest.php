@@ -121,4 +121,32 @@ final class UrlTest extends TestCase
         $this->expectException(InvalidUrlException::class);
         Url::fromString('https://-bad.example.com/');
     }
+
+    /**
+     * Credentials in the URL are how a staging site behind Basic auth gets
+     * analysed. Master passed the raw URL to Guzzle and curl sent them;
+     * dropping them here silently ran every check against the 401 page.
+     */
+    public function testKeepsUserInfoOutOfTheOriginButInTheString(): void
+    {
+        $url = Url::fromString('https://user:p w@example.com:8443/x');
+
+        self::assertSame('user:p%20w', $url->userInfo);
+        self::assertSame('https://example.com:8443', $url->origin());
+        self::assertSame('user:p%20w@example.com:8443', $url->authority());
+        self::assertSame('https://user:p%20w@example.com:8443/x', (string) $url);
+    }
+
+    public function testKeepsAUserWithoutAPassword(): void
+    {
+        self::assertSame('https://user@example.com/', (string) Url::fromString('https://user@example.com/'));
+    }
+
+    public function testHasEmptyUserInfoWhenNoneWasGiven(): void
+    {
+        $url = Url::fromString('https://example.com/');
+
+        self::assertSame('', $url->userInfo);
+        self::assertSame('example.com', $url->authority());
+    }
 }
