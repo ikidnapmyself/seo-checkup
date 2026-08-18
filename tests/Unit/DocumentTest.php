@@ -85,4 +85,43 @@ final class DocumentTest extends TestCase
         // Should still be exactly 1 meta tag, not injected ones
         self::assertSame(1, $document->tags('meta')->length);
     }
+
+    /**
+     * libxml never decodes entities inside <style>, <script> or comments, so
+     * the numeric-entity pre-pass that keeps UTF-8 alive elsewhere used to
+     * leave literal "&#NNN;" sequences in exactly those nodes — visible in
+     * inlineCss(), googleAnalytics()'s inline scripts and cache()'s comments.
+     */
+    public function testKeepsRawTextOfStyleScriptAndCommentsIntact(): void
+    {
+        $document = new Document(
+            '<html><head><style>a::after{content:"→ é"}</style></head>'
+            . '<body><!-- cache: café --><p>naïve</p><script>var s = "中文";</script></body></html>'
+        );
+
+        self::assertSame('a::after{content:"→ é"}', $document->tags('style')->item(0)?->textContent);
+        self::assertSame('var s = "中文";', $document->tags('script')->item(0)?->textContent);
+        $comment = $document->xpath()->query('//comment()');
+        self::assertNotFalse($comment);
+        self::assertInstanceOf(\DOMComment::class, $comment->item(0));
+        self::assertSame(' cache: café ', $comment->item(0)->textContent);
+        self::assertStringContainsString('naïve', $document->text());
+    }
+
+    /**
+     * A UTF-8 byte-order mark is common on Windows/CMS-authored pages. It is
+     * not whitespace, so trim() left it in place before <!DOCTYPE>, and the
+     * parser then treated it as body text: <head> collapsed into <body> and
+     * U+FEFF leaked into text().
+     */
+    public function testStripsALeadingUtf8Bom(): void
+    {
+        $document = new Document(
+            "\xEF\xBB\xBF<!DOCTYPE html><html><head><title>T</title></head><body><h1>H</h1></body></html>"
+        );
+
+        self::assertSame('head', $document->tags('title')->item(0)?->parentNode?->nodeName);
+        self::assertStringNotContainsString("\u{FEFF}", $document->text());
+        self::assertSame(1, $document->tags('title')->length);
+    }
 }
