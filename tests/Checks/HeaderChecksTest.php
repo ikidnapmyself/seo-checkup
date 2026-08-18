@@ -63,16 +63,49 @@ final class HeaderChecksTest extends TestCase
         self::assertArrayNotHasKey('Content-Type', $data);
     }
 
+    /**
+     * Master matched the header *value* as well as the name — 'Via: 1.1
+     * varnish server' and 'X-Generator: Powered by Foo' both reveal the
+     * stack — and the rewrite silently dropped that half.
+     */
+    public function testServerSignatureAlsoMatchesOnTheHeaderValue(): void
+    {
+        $analyze = AnalyzeFactory::make('<html></html>', [
+            'Via'          => '1.1 varnish server',
+            'X-Generator'  => 'Powered by Foo',
+            'Content-Type' => 'text/html',
+        ]);
+
+        $data = $analyze->serverSignature()['data'];
+
+        self::assertSame('1.1 varnish server', $data['Via']);
+        self::assertSame('Powered by Foo', $data['X-Generator']);
+        self::assertArrayNotHasKey('Content-Type', $data);
+    }
+
+    /**
+     * Header matches are reported as "Name: value". Matching on the name is
+     * what makes 'Cache-Control: max-age=600' — the definitive cache signal —
+     * show up at all, and without the name a hit such as 'X-Cache-Hits: 0'
+     * would come back as a bare '0'.
+     */
     public function testCacheReportsCacheHeadersAndHtmlComments(): void
     {
         $analyze = AnalyzeFactory::make(
             '<html><body><!-- cached at 12:00 --><p>x</p></body></html>',
-            ['Cache-Control' => 'max-age=600', 'Content-Type' => 'text/html']
+            ['Cache-Control' => 'max-age=600', 'X-Cache-Hits' => '0', 'Content-Type' => 'text/html']
         );
 
         $data = $analyze->cache()['data'];
 
-        self::assertSame(['max-age=600'], $data['headers']);
+        self::assertSame(['Cache-Control: max-age=600', 'X-Cache-Hits: 0'], $data['headers']);
         self::assertCount(1, $data['html']);
+    }
+
+    public function testCacheAlsoMatchesOnTheHeaderValue(): void
+    {
+        $analyze = AnalyzeFactory::make('<html></html>', ['X-Backend' => 'edge-cache-3', 'Content-Type' => 'text/html']);
+
+        self::assertSame(['X-Backend: edge-cache-3'], $analyze->cache()['data']['headers']);
     }
 }

@@ -67,7 +67,7 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 | Check | `data` holds |
 |---|---|
 | `brokenLinks(int $limit = 25)` | `links` (all links found) and `scanned.errors` / `scanned.passed`, each keyed by `"HTTP {status}"`, for the first `$limit` links |
-| `cache()` | `headers` (response header values mentioning "cache") and `html` (HTML comments mentioning "cache") |
+| `cache()` | `headers` (response headers whose name or value mentions "cache", as `Name: value`) and `html` (HTML comments mentioning "cache") |
 | `canonicalTag()` | The resolved absolute href of `<link rel="canonical">`, or `''` |
 | `characterSet()` | The charset parsed from the `Content-Type` header, or `''` |
 | `codeContent()` | `page_size`, `code_size`, `content_size` (character counts, via `mb_strlen` — not bytes) and `percentage` — the ratio of visible text to page size — plus `content`: the page's full extracted visible text, which can be large |
@@ -91,7 +91,7 @@ All 29 checks are camelCase methods on `Analyze`. Each returns the envelope abov
 | `plaintextEmail()` | Email addresses found in the page's visible text |
 | `pageCompression()` | `actual`/`possible` size in KB, `percentage` and `difference` if the body were gzipped |
 | `robotsFile()` | The body of `/robots.txt` if it responded 200, otherwise `false` |
-| `serverSignature()` | Response headers whose name contains "server" or "powered" |
+| `serverSignature()` | Response headers whose name or value contains "server" or "powered", keyed by header name |
 | `socialMedia()` | Links grouped by social network (Facebook, Twitter, LinkedIn, YouTube, GitHub) |
 | `spfRecord()` | TXT DNS records for the host that mention "spf" |
 | `underscoredLinks()` | Same-host links containing an underscore |

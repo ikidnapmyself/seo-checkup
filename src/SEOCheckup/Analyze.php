@@ -135,10 +135,14 @@ class Analyze
     {
         $output = ['headers' => [], 'html' => []];
 
+        // Name or value: Cache-Control matches on its name and X-Backend:
+        // edge-cache on its value. Reported as "Name: value" so a hit such as
+        // "X-Cache-Hits: 0" is not a bare "0" with the reason it matched
+        // stripped off.
         foreach ($this->page->headers as $key => $values) {
             foreach ($values as $value) {
                 if (str_contains(mb_strtolower($key . ' ' . $value), 'cache')) {
-                    $output['headers'][] = $value;
+                    $output['headers'][] = $key . ': ' . $value;
                 }
             }
         }
@@ -698,7 +702,9 @@ class Analyze
     }
 
     /**
-     * Headers that reveal the server stack.
+     * Headers that reveal the server stack, matched on name or value:
+     * "Server" and "X-Powered-By" by name, "Via: 1.1 varnish server" and
+     * "X-Generator: Powered by Foo" by value.
      *
      * @return array<string, mixed>
      */
@@ -708,9 +714,11 @@ class Analyze
         $danger = ['server', 'powered'];
 
         foreach ($this->page->headers as $key => $values) {
+            $value = $values[0] ?? '';
+
             foreach ($danger as $needle) {
-                if (str_contains(strtolower($key), $needle)) {
-                    $output[$key] = $values[0] ?? '';
+                if (str_contains(strtolower($key), $needle) || str_contains(strtolower($value), $needle)) {
+                    $output[$key] = $value;
                 }
             }
         }
