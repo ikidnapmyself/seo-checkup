@@ -38,7 +38,7 @@ final class Checks
             return array_merge(...array_values($groups));
         }
         if ($selection === []) {
-            throw new UsageException('--checks must name at least one check or group');
+            throw new UsageException('checks must name at least one check or group');
         }
 
         $wanted = [];
@@ -62,15 +62,16 @@ final class Checks
         return array_merge(...array_values(self::GROUPS));
     }
 
-    /** localhost, loopback IPs and the .local / .test dev TLDs. */
+    /** localhost (and *.localhost), 127.* loopback, ::1 and the .local / .test dev TLDs. */
     public static function isLocal(string $url): bool
     {
         $host = strtolower((string) parse_url($url, PHP_URL_HOST));
         $host = trim($host, '[]');
 
         return $host === 'localhost'
-            || $host === '127.0.0.1'
+            || str_starts_with($host, '127.')
             || $host === '::1'
+            || str_ends_with($host, '.localhost')
             || str_ends_with($host, '.local')
             || str_ends_with($host, '.test');
     }

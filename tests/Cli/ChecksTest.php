@@ -43,7 +43,7 @@ final class ChecksTest extends TestCase
     /** @return list<array{string}> */
     public static function localHosts(): array
     {
-        return [['http://localhost:3000/'], ['http://127.0.0.1/'], ['http://[::1]:8080/'], ['http://app.local/'], ['http://site.test/']];
+        return [['http://localhost:3000/'], ['http://127.0.0.1/'], ['http://[::1]:8080/'], ['http://app.local/'], ['http://site.test/'], ['http://127.0.0.2/'], ['http://app.localhost/']];
     }
 
     #[DataProvider('localHosts')]
@@ -64,7 +64,7 @@ final class ChecksTest extends TestCase
     public function testEmptySelectionIsAUsageError(): void
     {
         $this->expectException(UsageException::class);
-        $this->expectExceptionMessage('--checks must name at least one check or group');
+        $this->expectExceptionMessage('checks must name at least one check or group');
         Checks::resolve([], 'https://example.com');
     }
 
