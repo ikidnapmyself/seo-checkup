@@ -1,0 +1,9 @@
+{
+  "url": "https://file.example",
+  "paths": ["/", "/blog/post"],
+  "checks": ["meta"],
+  "fail-on": ["recommended"],
+  "overrides": {
+    "/blog/*": { "fail-on": ["broken-links"], "checks": ["links"] }
+  }
+}
