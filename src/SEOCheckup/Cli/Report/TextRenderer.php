@@ -26,7 +26,8 @@ final class TextRenderer implements Renderer
             foreach ($p->verdicts as $v) {
                 $label = $this->paint(self::LABEL[$v->result] ?? strtoupper($v->result), self::COLOR[$v->result] ?? '0');
                 $mark  = $v->failsRun && $v->result !== Verdict::SKIP ? ' [fail-on]' : '';
-                $out .= "  {$label}  {$v->rule}{$mark}: {$v->message}\n";
+                $message = str_replace(["\r\n", "\r", "\n"], ' ', $v->message);
+                $out .= "  {$label}  {$v->rule}{$mark}: {$message}\n";
             }
             $out .= "\n";
             foreach ($p->checks as $envelope) {

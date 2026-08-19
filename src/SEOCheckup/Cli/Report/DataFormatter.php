@@ -39,7 +39,7 @@ final class DataFormatter
     }
 
     /**
-     * One-line rendering of a scalar: bools as true/false, null, whitespace collapsed, long text truncated.
+     * One-line rendering of a scalar: bools as true/false, null, empty as "", whitespace collapsed, long text truncated.
      */
     public static function scalar(mixed $v): string
     {
@@ -54,6 +54,9 @@ final class DataFormatter
         }
         $s = is_scalar($v) ? (string) $v : get_debug_type($v);
         $s = preg_replace('/\s+/u', ' ', trim($s)) ?? $s;
+        if ($s === '') {
+            return '""';
+        }
         if (mb_strlen($s) > self::MAX_TEXT) {
             $s = mb_substr($s, 0, self::MAX_TEXT) . '… (truncated)';
         }

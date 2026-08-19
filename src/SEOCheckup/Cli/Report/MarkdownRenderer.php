@@ -17,7 +17,7 @@ final class MarkdownRenderer implements Renderer
         $failedPages = 0;
         foreach ($pages as $p) {
             $failedPages += $p->failed ? 1 : 0;
-            $md .= "## {$p->url} — HTTP {$p->status}\n\n";
+            $md .= '## ' . self::escape($p->url) . " — HTTP {$p->status}\n\n";
             $md .= "| Rule | Result | Message | Fails run |\n|---|---|---|---|\n";
             foreach ($p->verdicts as $v) {
                 $icon  = self::ICON[$v->result] ?? '';
@@ -29,7 +29,7 @@ final class MarkdownRenderer implements Renderer
                 $data    = $envelope['data'] ?? null;
                 $service = self::escape(is_string($envelope['service'] ?? null) ? $envelope['service'] : '');
                 $md .= is_array($data) && $data !== []
-                    ? "**{$service}**:\n" . self::escape(DataFormatter::lines($data)) . "\n\n"
+                    ? "**{$service}**:\n\n" . self::fence(DataFormatter::lines($data)) . "\n"
                     : "**{$service}**: " . self::escape(DataFormatter::scalar($data)) . "\n\n";
             }
             $md .= "</details>\n\n";
@@ -42,7 +42,23 @@ final class MarkdownRenderer implements Renderer
 
     private static function cell(string $s): string
     {
-        return str_replace(['|', "\n"], ['\\|', ' '], self::escape($s));
+        return str_replace(['|', "\r\n", "\r", "\n"], ['\\|', ' ', ' ', ' '], self::escape($s));
+    }
+
+    /**
+     * Fenced code block — GFM leaves the content's shape alone, so no escaping inside.
+     * The fence is one backtick longer than the longest backtick run in the content.
+     */
+    private static function fence(string $s): string
+    {
+        $longest = 2;
+        preg_match_all('/`+/', $s, $m);
+        foreach ($m[0] as $run) {
+            $longest = max($longest, strlen($run));
+        }
+        $fence = str_repeat('`', $longest + 1);
+
+        return "{$fence}\n{$s}\n{$fence}\n";
     }
 
     private static function escape(string $s): string

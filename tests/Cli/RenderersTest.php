@@ -75,7 +75,8 @@ final class RenderersTest extends TestCase
         self::assertStringContainsString('| `noindex` | ❌ fail | page declares noindex | no |', $md);
         self::assertStringContainsString('<details><summary>Raw checks</summary>', $md);
         self::assertStringContainsString('**Meta Title**: Hello', $md);
-        self::assertStringContainsString("**Header1**:\n- One\n- Two", $md);
+        self::assertStringContainsString("**Header1**:\n\n```\n- One\n- Two\n```\n", $md);
+        self::assertStringContainsString("**Image Alt**:\n\n```\nimages:\n  -\n    src: /a.png\n    alt: \"\"\nwithout_alt:\n  - /a.png\n```\n", $md);
         self::assertStringContainsString('**Https**: true', $md);
         self::assertStringContainsString('**Robots File**: false', $md);
         self::assertStringContainsString('**Header2**: (none)', $md);
@@ -135,6 +136,7 @@ final class RenderersTest extends TestCase
         self::assertSame("k: v\nn: 3", DataFormatter::lines(['k' => 'v', 'n' => 3]));
         self::assertSame("outer:\n  - x\n  - y\nempty: (none)", DataFormatter::lines(['outer' => ['x', 'y'], 'empty' => []]));
         self::assertSame('a b c', DataFormatter::scalar("a\n  b\tc"), 'whitespace collapsed');
+        self::assertSame('""', DataFormatter::scalar(''), 'empty stays visible');
         self::assertSame(DataFormatter::MAX_TEXT + mb_strlen('… (truncated)'), mb_strlen(DataFormatter::scalar(str_repeat('é', 600))));
     }
 }
