@@ -2,6 +2,7 @@
     "name": "ikidnapmyself/seo-checkup",
     "description": "PHP toolbox for SEO checkup",
     "license": "MIT",
+    "bin": ["bin/seo-checkup"],
     "authors": [
         {
             "name": "Burak"
