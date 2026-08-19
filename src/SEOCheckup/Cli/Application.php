@@ -2,6 +2,14 @@
 
 namespace SEOCheckup\Cli;
 
+use GuzzleHttp\Client;
+use SEOCheckup\Analyze;
+use SEOCheckup\Exception\SeoCheckupException;
+
+/**
+ * The command: argv → Config → one Runner pass per page → a Renderer →
+ * stdout or --output, and an exit code CI can act on.
+ */
 final class Application
 {
     public const VERSION = '1.1.0';
@@ -9,6 +17,20 @@ final class Application
     public const EXIT_OK     = 0;
     public const EXIT_FAILED = 1;
     public const EXIT_USAGE  = 2;
+
+    private const CONNECT_TIMEOUT = 5.0;
+
+    /** @var \Closure(string, int): Analyze */
+    private readonly \Closure $factory;
+
+    /**
+     * @param (callable(string, int): Analyze)|null $factory (url, timeout seconds) → Analyze.
+     *        null builds a Guzzle client honouring --timeout; tests inject a fake.
+     */
+    public function __construct(?callable $factory = null)
+    {
+        $this->factory = $factory !== null ? $factory(...) : self::defaultFactory(...);
+    }
 
     /**
      * @param list<string> $argv   including argv[0]
@@ -19,29 +41,76 @@ final class Application
     {
         try {
             $options = ArgvParser::parse(array_slice($argv, 1));
+
+            if ($options->version) {
+                fwrite($stdout, 'seo-checkup ' . self::VERSION . "\n");
+
+                return self::EXIT_OK;
+            }
+
+            if ($options->help) {
+                fwrite($stdout, self::usage());
+
+                return self::EXIT_OK;
+            }
+
+            $config = Config::build($options, $options->config);
+            $runner = new Runner(fn (string $url): Analyze => ($this->factory)($url, $config->timeout));
+
+            $pages  = [];
+            $failed = false;
+
+            foreach ($config->pages() as $url => $settings) {
+                try {
+                    $result = $runner->run($url, $settings);
+                } catch (SeoCheckupException $e) {
+                    throw new FetchException("Could not fetch {$url}: {$e->getMessage()}", 0, $e);
+                }
+
+                $pages[] = $result;
+                $failed  = $failed || $result->failed;
+            }
+
+            $tty    = $config->output === null && stream_isatty($stdout);
+            $report = self::renderer($config->format, $tty)->render($pages, $failed);
+
+            if ($config->output !== null) {
+                if (@file_put_contents($config->output, $report) === false) {
+                    throw new UsageException("Could not write {$config->output}");
+                }
+            } else {
+                fwrite($stdout, $report);
+            }
+
+            return $failed ? self::EXIT_FAILED : self::EXIT_OK;
+        } catch (FetchException $e) {
+            fwrite($stderr, "seo-checkup: {$e->getMessage()}\n");
+
+            return self::EXIT_USAGE;
         } catch (UsageException $e) {
             fwrite($stderr, "seo-checkup: {$e->getMessage()}\n");
             fwrite($stderr, "Run 'seo-checkup --help' for usage.\n");
 
             return self::EXIT_USAGE;
         }
+    }
 
-        if ($options->version) {
-            fwrite($stdout, 'seo-checkup ' . self::VERSION . "\n");
+    private static function renderer(string $format, bool $tty): Report\Renderer
+    {
+        return match ($format) {
+            'json'  => new Report\JsonRenderer(),
+            'md'    => new Report\MarkdownRenderer(),
+            default => new Report\TextRenderer(color: $tty),
+        };
+    }
 
-            return self::EXIT_OK;
-        }
-
-        if ($options->help) {
-            fwrite($stdout, self::usage());
-
-            return self::EXIT_OK;
-        }
-
-        // A later task replaces this with the real run.
-        fwrite($stdout, "not implemented\n");
-
-        return self::EXIT_OK;
+    private static function defaultFactory(string $url, int $timeout): Analyze
+    {
+        return new Analyze($url, new Client([
+            'connect_timeout' => self::CONNECT_TIMEOUT,
+            'timeout'         => (float) $timeout,
+            'http_errors'     => false,
+        ]));
     }
 
     public static function usage(): string

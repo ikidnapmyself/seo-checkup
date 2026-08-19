@@ -46,11 +46,9 @@ final class ArgvParserTest extends TestCase
         self::assertTrue(ArgvParser::parse(['--version'])->version);
     }
 
-    public function testMissingUrlThrows(): void
+    public function testMissingUrlIsNull(): void
     {
-        $this->expectException(UsageException::class);
-        $this->expectExceptionMessage('<url> is required');
-        ArgvParser::parse([]);
+        self::assertNull(ArgvParser::parse([])->url, 'Config decides; the URL may come from the config file');
     }
 
     public function testTwoPositionalsThrow(): void

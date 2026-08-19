@@ -44,10 +44,6 @@ final class ArgvParser
             $url = $arg;
         }
 
-        if ($url === null && !$help && !$version) {
-            throw new UsageException('<url> is required');
-        }
-
         $format = $values['format'] ?? null;
         if ($format !== null && !in_array($format, Options::FORMATS, true)) {
             throw new UsageException('--format must be one of ' . implode(', ', Options::FORMATS));
