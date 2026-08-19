@@ -69,7 +69,7 @@ final class Checks
         $host = trim($host, '[]');
 
         return $host === 'localhost'
-            || str_starts_with($host, '127.')
+            || (str_starts_with($host, '127.') && filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false)
             || $host === '::1'
             || str_ends_with($host, '.localhost')
             || str_ends_with($host, '.local')

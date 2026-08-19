@@ -11,6 +11,37 @@ final class ConfigTest extends TestCase
 {
     private const FILE = __DIR__ . '/../fixtures/seo-checkup.json';
 
+    private string $originalCwd = '';
+
+    private string $tempCwd = '';
+
+    /** load(null) probes ./seo-checkup.json, so run every test from an empty dir. */
+    protected function setUp(): void
+    {
+        $cwd = getcwd();
+        \assert($cwd !== false);
+        $this->originalCwd = $cwd;
+        $this->tempCwd = sys_get_temp_dir() . '/seo-config-' . uniqid();
+        mkdir($this->tempCwd);
+        chdir($this->tempCwd);
+    }
+
+    protected function tearDown(): void
+    {
+        chdir($this->originalCwd);
+        array_map('unlink', glob($this->tempCwd . '/*') ?: []);
+        rmdir($this->tempCwd);
+    }
+
+    private function tempJson(string $json): string
+    {
+        $tmp = tempnam($this->tempCwd, 'cfg');
+        \assert($tmp !== false);
+        file_put_contents($tmp, $json);
+
+        return $tmp;
+    }
+
     public function testDefaultsWhenNoFileAndNoFlags(): void
     {
         $c = Config::build(new Options(url: 'https://example.com'), null);
@@ -32,15 +63,47 @@ final class ConfigTest extends TestCase
         self::assertSame(['/', '/blog/post'], $c->paths);
         self::assertSame(['meta'], $c->checks);
         self::assertSame(['broken-links', 'missing-title', 'missing-description', 'missing-canonical', 'not-https'], $c->failOn);
+        self::assertSame('json', $c->format);
+        self::assertSame(30, $c->timeout);
     }
 
     public function testFlagsOverrideFile(): void
     {
-        $c = Config::build(new Options(url: 'https://x', paths: ['/a'], checks: ['links'], failOn: ['none']), self::FILE);
+        $c = Config::build(new Options(url: 'https://x', paths: ['/a'], checks: ['links'], failOn: ['none'], format: 'md', timeout: 5), self::FILE);
 
         self::assertSame(['/a'], $c->paths);
         self::assertSame(['links'], $c->checks);
         self::assertSame([], $c->failOn);
+        self::assertSame('md', $c->format);
+        self::assertSame(5, $c->timeout);
+    }
+
+    public function testAutoDiscoversFileInCwd(): void
+    {
+        file_put_contents($this->tempCwd . '/' . Config::DEFAULT_FILE, '{"url": "https://cwd.example"}');
+
+        self::assertSame('https://cwd.example', Config::build(new Options(), null)->url);
+    }
+
+    public function testInvalidFormatInFileIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('format must be one of text, md, json');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{"format": "xml"}'));
+    }
+
+    public function testInvalidTimeoutInFileIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('timeout must be a positive integer');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{"timeout": "fast"}'));
+    }
+
+    public function testUnknownRuleInOverrideFailsAtBuild(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Unknown rule: bogus');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{"overrides": {"/*": {"fail-on": ["bogus"]}}}'));
     }
 
     public function testNoPathsMeansJustTheUrl(): void
@@ -73,19 +136,12 @@ final class ConfigTest extends TestCase
 
     public function testOverridesMatchTheResolvedPathNotTheRawOne(): void
     {
-        $tmp = tempnam(sys_get_temp_dir(), 'seo');
-        \assert($tmp !== false);
-        file_put_contents($tmp, '{"overrides": {"/base/*": {"fail-on": ["noindex"]}}}');
+        $file = $this->tempJson('{"overrides": {"/base/*": {"fail-on": ["noindex"]}}}');
+        $c = Config::build(new Options(url: 'https://example.com/base/', paths: ['about', '/base/x?q=1']), $file);
+        $pages = $c->pages();
 
-        try {
-            $c = Config::build(new Options(url: 'https://example.com/base/', paths: ['about', '/base/x?q=1']), $tmp);
-            $pages = $c->pages();
-
-            self::assertSame(['noindex'], $pages['https://example.com/base/about']->failOn);
-            self::assertSame(['noindex'], $pages['https://example.com/base/x?q=1']->failOn);
-        } finally {
-            unlink($tmp);
-        }
+        self::assertSame(['noindex'], $pages['https://example.com/base/about']->failOn);
+        self::assertSame(['noindex'], $pages['https://example.com/base/x?q=1']->failOn);
     }
 
     public function testMissingExplicitFileIsAUsageError(): void
@@ -97,17 +153,9 @@ final class ConfigTest extends TestCase
 
     public function testInvalidJsonIsAUsageError(): void
     {
-        $tmp = tempnam(sys_get_temp_dir(), 'seo');
-        \assert($tmp !== false);
-        file_put_contents($tmp, '{not json');
-
-        try {
-            $this->expectException(UsageException::class);
-            $this->expectExceptionMessage('Config file is not valid JSON');
-            Config::build(new Options(url: 'https://x'), $tmp);
-        } finally {
-            unlink($tmp);
-        }
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Config file is not valid JSON');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{not json'));
     }
 
     public function testUrlFromFileWhenFlagMissing(): void

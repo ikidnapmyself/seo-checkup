@@ -19,7 +19,7 @@ final class Config
      * @param list<string>      $paths   [] = just $url
      * @param list<string>|null $checks  null = Checks::resolve() default
      * @param list<string>      $failOn  expanded rule names
-     * @param array<string, array{checks?: list<string>|null, fail-on?: list<string>}> $overrides path glob => settings
+     * @param array<string, array{checks?: list<string>|null, fail-on?: list<string>}> $overrides path glob => settings (fail-on already expanded)
      */
     private function __construct(
         public readonly string $url,
@@ -43,14 +43,21 @@ final class Config
         $url = $o->url ?? self::string($data, 'url')
             ?? throw new UsageException('<url> is required (or "url" in ' . ($file ?? self::DEFAULT_FILE) . ')');
 
+        $format = $o->format ?? self::string($data, 'format') ?? 'text';
+        if (!in_array($format, Options::FORMATS, true)) {
+            throw new UsageException('format must be one of ' . implode(', ', Options::FORMATS));
+        }
+
+        $timeout = $o->timeout ?? self::timeout($data) ?? self::DEFAULT_TIMEOUT;
+
         return new self(
             url: $url,
             paths: $o->paths ?? self::list($data, 'paths') ?? [],
             checks: $o->checks ?? self::list($data, 'checks'),
             failOn: RuleCatalogue::expand($o->failOn ?? self::list($data, 'fail-on')),
-            format: $o->format ?? self::string($data, 'format') ?? 'text',
+            format: $format,
             output: $o->output,
-            timeout: $o->timeout ?? self::int($data, 'timeout') ?? self::DEFAULT_TIMEOUT,
+            timeout: $timeout,
             overrides: self::overrides($data),
         );
     }
@@ -62,6 +69,9 @@ final class Config
      * Overrides are matched against the resolved page URL's path (no
      * query), so "about" against https://x/base/ matches "/base/*".
      * No paths = exactly $url, matched against overrides by its own path.
+     *
+     * Override fail-on lists were expanded at build() time, so an unknown
+     * rule name in the file fails before any page is fetched.
      *
      * @return array<string, PageSettings> page URL => settings
      * @throws UsageException if $url or a resolved page URL is invalid
@@ -102,7 +112,7 @@ final class Config
                     $checks = $o['checks'];
                 }
                 if (array_key_exists('fail-on', $o)) {
-                    $failOn = RuleCatalogue::expand($o['fail-on']);
+                    $failOn = $o['fail-on'];
                 }
             }
         }
@@ -140,10 +150,21 @@ final class Config
         return isset($d[$k]) && is_string($d[$k]) ? $d[$k] : null;
     }
 
-    /** @param array<string, mixed> $d */
-    private static function int(array $d, string $k): ?int
+    /**
+     * @param array<string, mixed> $d
+     * @throws UsageException if present but not a positive integer
+     */
+    private static function timeout(array $d): ?int
     {
-        return isset($d[$k]) && is_int($d[$k]) && $d[$k] > 0 ? $d[$k] : null;
+        if (!array_key_exists('timeout', $d)) {
+            return null;
+        }
+        $t = $d['timeout'];
+        if (!is_int($t) || $t <= 0) {
+            throw new UsageException('timeout must be a positive integer');
+        }
+
+        return $t;
     }
 
     /**
@@ -161,7 +182,8 @@ final class Config
 
     /**
      * @param array<string, mixed> $d
-     * @return array<string, array{checks?: list<string>|null, fail-on?: list<string>}>
+     * @return array<string, array{checks?: list<string>|null, fail-on?: list<string>}> fail-on expanded to rule names
+     * @throws UsageException on an unknown rule name
      */
     private static function overrides(array $d): array
     {
@@ -179,7 +201,7 @@ final class Config
                 $entry['checks'] = self::list($o, 'checks');
             }
             if (array_key_exists('fail-on', $o)) {
-                $entry['fail-on'] = self::list($o, 'fail-on') ?? [];
+                $entry['fail-on'] = RuleCatalogue::expand(self::list($o, 'fail-on') ?? []);
             }
             $out[$glob] = $entry;
         }

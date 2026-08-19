@@ -80,5 +80,6 @@ final class ChecksTest extends TestCase
         self::assertTrue(Checks::isLocal('http://localhost/'));
         self::assertFalse(Checks::isLocal('https://example.com/'));
         self::assertFalse(Checks::isLocal('https://localhost.example.com/'));
+        self::assertFalse(Checks::isLocal('http://127.example.com/'));
     }
 }
