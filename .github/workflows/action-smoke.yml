@@ -18,6 +18,7 @@ jobs:
           serve-url: http://127.0.0.1:8080/
           checks: meta,content
           fail-on: missing-title
+          artifact-name: seo-checkup-report-serve
       - run: |
           test "${{ steps.seo.outputs.failed }}" = "false"
           test -f "${{ steps.seo.outputs.report }}"
@@ -34,6 +35,7 @@ jobs:
           url: https://example.com
           checks: meta
           fail-on: missing-title
+          artifact-name: seo-checkup-report-url
       - run: test "${{ steps.seo.outputs.failed }}" = "false"
 
   url-mode-fails:

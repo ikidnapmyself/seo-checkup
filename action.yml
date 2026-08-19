@@ -37,9 +37,13 @@ inputs:
     required: false
     default: "8.3"
   artifact:
-    description: Upload the JSON report as the `seo-checkup-report` workflow artifact.
+    description: Upload the JSON report as a workflow artifact (see `artifact-name`).
     required: false
     default: "true"
+  artifact-name:
+    description: "Name of the uploaded report artifact. Must be unique per workflow run — set it when the action runs more than once (matrix, several sites)."
+    required: false
+    default: seo-checkup-report
 
 outputs:
   failed:
@@ -100,10 +104,10 @@ runs:
         SERVE_URL: ${{ inputs.serve-url }}
         SERVE_TIMEOUT: ${{ inputs.serve-timeout }}
       run: |
-        nohup bash -c "$SERVE" > "$RUNNER_TEMP/seo-checkup-server.log" 2>&1 &
+        setsid nohup bash -c "$SERVE" > "$RUNNER_TEMP/seo-checkup-server.log" 2>&1 &
         echo $! > "$RUNNER_TEMP/seo-checkup-server.pid"
         for i in $(seq 1 "$SERVE_TIMEOUT"); do
-          if curl -sS -o /dev/null "$SERVE_URL"; then
+          if curl -fsS -o /dev/null "$SERVE_URL" 2>/dev/null; then
             echo "server answered after ${i}s"
             exit 0
           fi
@@ -132,12 +136,12 @@ runs:
 
         report="$RUNNER_TEMP/seo-checkup-report.json"
         summary="$RUNNER_TEMP/seo-checkup-summary.md"
-        echo "report=$report" >> "$GITHUB_OUTPUT"
 
         set +e
         seo-checkup "${args[@]}" --format=json --output="$report"
         code=$?
         set -e
+        [ -f "$report" ] && echo "report=$report" >> "$GITHUB_OUTPUT"
 
         if [ "$code" -le 1 ]; then
           # Second pass for the human-readable summary (the CLI writes one format per run).
@@ -157,7 +161,7 @@ runs:
     - uses: actions/upload-artifact@v4
       if: always() && inputs.artifact == 'true' && steps.run.outputs.report != ''
       with:
-        name: seo-checkup-report
+        name: ${{ inputs.artifact-name }}
         path: ${{ steps.run.outputs.report }}
         if-no-files-found: ignore
 
@@ -166,4 +170,6 @@ runs:
       shell: bash
       run: |
         pid="$RUNNER_TEMP/seo-checkup-server.pid"
-        if [ -f "$pid" ]; then kill "$(cat "$pid")" 2>/dev/null || true; fi
+        if [ -f "$pid" ]; then
+          kill -- -"$(cat "$pid")" 2>/dev/null || kill "$(cat "$pid")" 2>/dev/null || true
+        fi
