@@ -59,6 +59,8 @@ final class Config
      * Every page to check, with its effective settings after overrides.
      * Paths are resolved against $url per RFC 3986 (UrlResolver): an
      * absolute path replaces the URL's path, a relative one appends.
+     * Overrides are matched against the resolved page URL's path (no
+     * query), so "about" against https://x/base/ matches "/base/*".
      * No paths = exactly $url, matched against overrides by its own path.
      *
      * @return array<string, PageSettings> page URL => settings
@@ -73,7 +75,7 @@ final class Config
         }
 
         if ($this->paths === []) {
-            return [(string) $base => $this->settingsFor($base->path)];
+            return [(string) $base => $this->settingsFor((string) $base)];
         }
 
         $pages = [];
@@ -82,14 +84,16 @@ final class Config
             if ($resolved === null) {
                 throw new UsageException("Invalid path: {$path}");
             }
-            $pages[$resolved] = $this->settingsFor($path);
+            $pages[$resolved] = $this->settingsFor($resolved);
         }
 
         return $pages;
     }
 
-    private function settingsFor(string $path): PageSettings
+    private function settingsFor(string $pageUrl): PageSettings
     {
+        $path = parse_url($pageUrl, PHP_URL_PATH);
+        $path = is_string($path) && $path !== '' ? $path : '/';
         $checks = $this->checks;
         $failOn = $this->failOn;
         foreach ($this->overrides as $glob => $o) {

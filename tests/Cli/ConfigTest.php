@@ -71,6 +71,23 @@ final class ConfigTest extends TestCase
         self::assertSame(['broken-links', 'missing-title', 'missing-description', 'missing-canonical', 'not-https'], $pages['https://example.com/']->failOn);
     }
 
+    public function testOverridesMatchTheResolvedPathNotTheRawOne(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'seo');
+        \assert($tmp !== false);
+        file_put_contents($tmp, '{"overrides": {"/base/*": {"fail-on": ["noindex"]}}}');
+
+        try {
+            $c = Config::build(new Options(url: 'https://example.com/base/', paths: ['about', '/base/x?q=1']), $tmp);
+            $pages = $c->pages();
+
+            self::assertSame(['noindex'], $pages['https://example.com/base/about']->failOn);
+            self::assertSame(['noindex'], $pages['https://example.com/base/x?q=1']->failOn);
+        } finally {
+            unlink($tmp);
+        }
+    }
+
     public function testMissingExplicitFileIsAUsageError(): void
     {
         $this->expectException(UsageException::class);
