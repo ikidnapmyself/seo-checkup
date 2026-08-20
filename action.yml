@@ -1,5 +1,5 @@
 name: seo-checkup
-description: Run SEO checks against a deployed URL or a server started in the runner; write a job summary, upload a JSON report, and fail on the rules you choose.
+description: SEO checks for a deployed URL or a dev server started in the runner — job summary, JSON report, fail-on rules for CI.
 author: Burak
 branding:
   icon: search
