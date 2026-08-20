@@ -5,6 +5,7 @@ A PHP toolbox that runs 29 SEO checks against a live URL and returns each result
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/ci.yml/badge.svg)](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/ci.yml)
 [![Action smoke](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/action-smoke.yml/badge.svg)](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/action-smoke.yml)
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-seo--checkup-2088FF?logo=githubactions&logoColor=white)](https://github.com/marketplace/actions/seo-checkup)
 
 ## Requirements
 
