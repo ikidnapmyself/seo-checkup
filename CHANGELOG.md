@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-08-20
+
+### Added
+
+- **A `seo-checkup` command** (`bin/seo-checkup`, exposed via composer `bin`), a thin consumer of the library's public API. `SEOCheckup\Cli\Application` wires argv → config → one `Runner` pass per page → a renderer, and exits 0 (all fail-on rules passed), 1 (a fail-on rule failed) or 2 (usage or fetch error). Flags: `--paths`, `--checks`, `--fail-on`, `--format`, `--output`, `--config`, `--timeout`, `--help`, `--version`.
+- **Check groups** (`SEOCheckup\Cli\Checks`): the 29 `Analyze` methods grouped as `meta`, `links`, `content`, `headers`, `network` and `performance` — the CLI's vocabulary; the library still has no notion of them. With no `--checks`, everything runs except the `network` group on a local host (`localhost`/`*.localhost`, `127.*`, `[::1]`, `*.local`, `*.test`); an explicit selection is honoured as given, and report order is always catalogue order.
+- **A rule catalogue** (`SEOCheckup\Cli\RuleCatalogue`, `SEOCheckup\Cli\Rules\*`): 13 pass/fail rules evaluated over the raw check data on every run, of which only those named in `--fail-on` can fail the run. Presets `recommended` (broken-links, missing-title, missing-description, missing-canonical, not-https), `all` and `none`. A rule whose check was not selected reports `skip` and never fails the run.
+- **`seo-checkup.json`** (`SEOCheckup\Cli\Config`): auto-discovered in the working directory or named with `--config`; precedence is flags > file > defaults. Keys `url`, `paths`, `checks`, `fail-on`, `format`, `timeout`, and `overrides` — per-path settings whose globs are `fnmatch`ed against each resolved page path (`*` crosses `/`). The file is validated eagerly: unknown rules, checks or formats and non-positive timeouts fail with exit 2 before anything is fetched.
+- **Three renderers** (`SEOCheckup\Cli\Report`): `text` (ANSI-coloured on a TTY), `md` (verdict tables with raw check data collapsed, made for CI job summaries) and `json` (verdicts plus the unmodified check envelopes); `--output` writes any of them to a file.
+- **A composite GitHub Action** (`action.yml`): checks either a deployed `url` or a server the runner starts via `serve`/`serve-url`/`serve-timeout`, writes the Markdown report to the job summary, uploads the JSON report as an artifact (`artifact`, `artifact-name`), and exposes `failed` and `report` outputs. It installs PHP via setup-php (`php-version`) and the package via Composer: a `vX.Y.Z` action ref installs that release, `vX` the latest in that major, and a branch or SHA runs the action's own checkout.
+- **An `action-smoke` workflow** exercising the action end to end in four jobs: serve mode against a fixture site, url mode, url mode that must fail on a fail-on rule, and the neither-input error path.
+- **`tests/Cli/*`**: 90 hermetic tests (375 assertions) covering the parser, groups, config precedence and overrides, all 13 rules, the runner and the three renderers — like the library suite, without touching the network.
+
+### Changed
+
+- Nothing in the library. `Analyze`, all 29 checks and the envelope are byte-for-byte unchanged; the CLI sits on top of the same public API any other consumer uses.
+
 ## [1.0.0] - 2026-08-14
 
 The first tagged release. `v0.1-beta` (February 2018) was the only prior tag; there was never a working, tested 1.0 before this.

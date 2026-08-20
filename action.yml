@@ -1,0 +1,175 @@
+name: seo-checkup
+description: Run SEO checks against a deployed URL or a server started in the runner; write a job summary, upload a JSON report, and fail on the rules you choose.
+author: Burak
+branding:
+  icon: search
+  color: green
+
+inputs:
+  url:
+    description: Page to check (a deployed site or preview URL). Required unless `serve` is set.
+    required: false
+  serve:
+    description: Shell command that starts a local server in the runner (e.g. `npm run dev -- --port 4321`). The page at `serve-url` is checked.
+    required: false
+  serve-url:
+    description: URL where `serve` listens; the action waits for it before checking.
+    required: false
+    default: http://localhost:3000
+  serve-timeout:
+    description: Seconds to wait for `serve-url` to answer.
+    required: false
+    default: "60"
+  paths:
+    description: "Comma-separated paths resolved against the URL (e.g. `/,/about,/blog`). Default: just the URL."
+    required: false
+  checks:
+    description: "Comma-separated groups and/or check names (meta, links, content, headers, network, performance, or e.g. metaTitle). Default: all (network checks skipped for local hosts)."
+    required: false
+  fail-on:
+    description: "Comma-separated rules or presets (all, recommended, none) whose failure fails the step. Default: none (report only)."
+    required: false
+  config:
+    description: "Path to a seo-checkup.json. Default: ./seo-checkup.json when present."
+    required: false
+  php-version:
+    description: PHP version for setup-php.
+    required: false
+    default: "8.3"
+  artifact:
+    description: Upload the JSON report as a workflow artifact (see `artifact-name`).
+    required: false
+    default: "true"
+  artifact-name:
+    description: "Name of the uploaded report artifact. Must be unique per workflow run — set it when the action runs more than once (matrix, several sites)."
+    required: false
+    default: seo-checkup-report
+
+outputs:
+  failed:
+    description: "`true` when a fail-on rule failed on any page, else `false`."
+    value: ${{ steps.run.outputs.failed }}
+  report:
+    description: Absolute path to the JSON report.
+    value: ${{ steps.run.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        SERVE: ${{ inputs.serve }}
+      run: |
+        if [ -z "$URL" ] && [ -z "$SERVE" ]; then
+          echo "::error::seo-checkup: set either the 'url' or the 'serve' input"
+          exit 2
+        fi
+
+    - uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php-version }}
+        extensions: dom, mbstring, zlib, intl
+        coverage: none
+        tools: composer
+
+    - name: Install seo-checkup
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        # A release tag (v1.2.3) installs that version; a major tag (v1) the latest
+        # in that major; anything else (branch, sha, local "./") runs the action's
+        # own checkout, so the smoke workflow tests the code under review.
+        if [[ "$ACTION_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          composer global require --no-progress --no-interaction "ikidnapmyself/seo-checkup:${ACTION_REF#v}"
+          bin="$(composer global config bin-dir --absolute --quiet)"
+        elif [[ "$ACTION_REF" =~ ^v[0-9]+$ ]]; then
+          composer global require --no-progress --no-interaction "ikidnapmyself/seo-checkup:^${ACTION_REF#v}"
+          bin="$(composer global config bin-dir --absolute --quiet)"
+        else
+          composer install --working-dir="$ACTION_PATH" --no-dev --no-progress --no-interaction
+          bin="$ACTION_PATH/bin"
+        fi
+        echo "$bin" >> "$GITHUB_PATH"
+        "$bin/seo-checkup" --version
+
+    - name: Start server
+      if: inputs.serve != ''
+      shell: bash
+      env:
+        SERVE: ${{ inputs.serve }}
+        SERVE_URL: ${{ inputs.serve-url }}
+        SERVE_TIMEOUT: ${{ inputs.serve-timeout }}
+      run: |
+        setsid nohup bash -c "$SERVE" > "$RUNNER_TEMP/seo-checkup-server.log" 2>&1 &
+        echo $! > "$RUNNER_TEMP/seo-checkup-server.pid"
+        for i in $(seq 1 "$SERVE_TIMEOUT"); do
+          if curl -fsS -o /dev/null "$SERVE_URL" 2>/dev/null; then
+            echo "server answered after ${i}s"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "::error::seo-checkup: $SERVE_URL did not answer within ${SERVE_TIMEOUT}s"
+        echo "--- server log (tail) ---"
+        tail -n 50 "$RUNNER_TEMP/seo-checkup-server.log" || true
+        exit 2
+
+    - name: Run seo-checkup
+      id: run
+      shell: bash
+      env:
+        URL: ${{ inputs.url != '' && inputs.url || inputs.serve-url }}
+        PATHS: ${{ inputs.paths }}
+        CHECKS: ${{ inputs.checks }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        CONFIG: ${{ inputs.config }}
+      run: |
+        args=("$URL")
+        [ -n "$PATHS" ]   && args+=("--paths=$PATHS")
+        [ -n "$CHECKS" ]  && args+=("--checks=$CHECKS")
+        [ -n "$FAIL_ON" ] && args+=("--fail-on=$FAIL_ON")
+        [ -n "$CONFIG" ]  && args+=("--config=$CONFIG")
+
+        report="$RUNNER_TEMP/seo-checkup-report.json"
+        summary="$RUNNER_TEMP/seo-checkup-summary.md"
+
+        set +e
+        seo-checkup "${args[@]}" --format=json --output="$report"
+        code=$?
+        set -e
+        [ -f "$report" ] && echo "report=$report" >> "$GITHUB_OUTPUT"
+
+        if [ "$code" -le 1 ]; then
+          # Second pass for the human-readable summary (the CLI writes one format per run).
+          seo-checkup "${args[@]}" --format=md --output="$summary" || true
+          [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        case $code in
+          0) echo "failed=false" >> "$GITHUB_OUTPUT" ;;
+          1) echo "failed=true"  >> "$GITHUB_OUTPUT"
+             echo "::error::seo-checkup: a fail-on rule failed — see the job summary" ;;
+          *) echo "failed=true"  >> "$GITHUB_OUTPUT"
+             echo "::error::seo-checkup exited with $code" ;;
+        esac
+        exit $code
+
+    - uses: actions/upload-artifact@v4
+      if: always() && inputs.artifact == 'true' && steps.run.outputs.report != ''
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.report }}
+        if-no-files-found: ignore
+
+    - name: Stop server
+      if: always() && inputs.serve != ''
+      shell: bash
+      run: |
+        pid="$RUNNER_TEMP/seo-checkup-server.pid"
+        if [ -f "$pid" ]; then
+          kill -- -"$(cat "$pid")" 2>/dev/null || kill "$(cat "$pid")" 2>/dev/null || true
+        fi

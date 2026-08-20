@@ -1,0 +1,68 @@
+name: Action smoke
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  serve-mode:
+    name: serve mode (local php -S)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: seo
+        uses: ./
+        with:
+          serve: php -S 127.0.0.1:8080 -t tests/fixtures/site
+          serve-url: http://127.0.0.1:8080/
+          checks: meta,content
+          fail-on: missing-title
+          artifact-name: seo-checkup-report-serve
+      - run: |
+          test "${{ steps.seo.outputs.failed }}" = "false"
+          test -f "${{ steps.seo.outputs.report }}"
+          jq -e '.failed == false and (.pages | length) == 1' "${{ steps.seo.outputs.report }}"
+
+  url-mode:
+    name: url mode (example.com)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: seo
+        uses: ./
+        with:
+          url: https://example.com
+          checks: meta
+          fail-on: missing-title
+          artifact-name: seo-checkup-report-url
+      - run: test "${{ steps.seo.outputs.failed }}" = "false"
+
+  url-mode-fails:
+    name: url mode, fail-on trips
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: seo
+        uses: ./
+        continue-on-error: true
+        with:
+          url: https://example.com
+          checks: meta
+          fail-on: missing-description
+          artifact: "false"
+      - run: |
+          test "${{ steps.seo.outcome }}" = "failure"
+          test "${{ steps.seo.outputs.failed }}" = "true"
+
+  neither-input:
+    name: neither url nor serve → clear error
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: seo
+        uses: ./
+        continue-on-error: true
+        with:
+          checks: meta
+      - run: test "${{ steps.seo.outcome }}" = "failure"

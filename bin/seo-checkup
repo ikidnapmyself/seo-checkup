@@ -1,0 +1,11 @@
+#!/usr/bin/env php
+<?php
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+exit((new SEOCheckup\Cli\Application())->run($argv, STDOUT, STDERR));

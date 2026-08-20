@@ -1,0 +1,11 @@
+{
+  "url": "https://file.example",
+  "paths": ["/", "/blog/post"],
+  "checks": ["meta"],
+  "fail-on": ["recommended"],
+  "format": "json",
+  "timeout": 30,
+  "overrides": {
+    "/blog/*": { "fail-on": ["broken-links"], "checks": ["links"] }
+  }
+}

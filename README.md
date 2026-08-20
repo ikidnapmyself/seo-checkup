@@ -1,9 +1,10 @@
 # seo-checkup
 
-A PHP toolbox that runs 29 SEO checks against a live URL and returns each result as a plain array.
+A PHP toolbox that runs 29 SEO checks against a live URL and returns each result as a plain array — as a library, a `seo-checkup` command, or a GitHub Action.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/ci.yml/badge.svg)](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/ci.yml)
+[![Action smoke](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/action-smoke.yml/badge.svg)](https://github.com/ikidnapmyself/seo-checkup/actions/workflows/action-smoke.yml)
 
 ## Requirements
 
@@ -46,7 +47,7 @@ Array
 )
 ```
 
-Every example in this README is real output, captured through the library's own test suite against the bundled fixture (`tests/fixtures/complete.html`) rather than against the live site in the snippet — so `data` shows the fixture's title, not what `example.com` serves.
+Every example in this README is real output. The library examples are captured through the library's own test suite against the bundled fixture (`tests/fixtures/complete.html`) rather than against the live site in the snippet — so `data` shows the fixture's title, not what `example.com` serves. Each example says so when it was captured differently (the CLI example below was run against the live example.com).
 
 Every check returns the same envelope: `url` is the URL you asked for — the checks themselves reason about where the request finally landed, which differs whenever a redirect was followed — `status` is the fetched page's, `headers` are the response headers, `service` is a human-readable label derived from the method name, `time` is a Unix timestamp of when the check ran, and `data` is the check's own result — the only field that differs from check to check.
 
@@ -59,6 +60,218 @@ $analyze = new SEOCheckup\Analyze('https://example.com', $myPsr18Client);
 ```
 
 Leave it out and the library builds its own Guzzle client with sane timeouts and a redirect cap. Pass one in and every request `Analyze` makes — the page itself, `robots.txt`, favicon probes, broken-link probes, external scripts for `googleAnalytics()` — goes through it instead. This is the seam that makes the library testable: the test suite injects a fake client and fixture HTML, and never touches the network. A third, optional argument accepts a `DnsLookup` implementation for the same reason — it backs the DNS lookup that `spfRecord()` uses.
+
+## Command line
+
+The package ships a `seo-checkup` command that runs the checks above against one or more pages, judges the results against a small rule catalogue, and exits with a code CI can act on.
+
+Install it per project:
+
+```
+composer require --dev ikidnapmyself/seo-checkup
+vendor/bin/seo-checkup --help
+```
+
+or globally, which puts `seo-checkup` on your PATH (run `composer global config bin-dir --absolute` to find the directory to add to PATH if it is not there already):
+
+```
+composer global require ikidnapmyself/seo-checkup
+seo-checkup --help
+```
+
+```
+Usage: seo-checkup <url> [options]
+
+  --paths=/,/about           Extra paths resolved against <url>; default: just <url>
+  --checks=meta,links,https  Groups and/or check names; default: all (network group
+                             skipped for localhost / *.local / *.test hosts)
+  --fail-on=broken-links,…   Rules or presets (all, recommended, none) that fail the run
+  --format=text|md|json      Output format; default: text
+  --output=FILE              Write the report to FILE instead of stdout
+  --config=FILE              Config file; default: ./seo-checkup.json if present
+  --timeout=N                Seconds per request; default: 15
+  --help                     Show this help
+  --version                  Show the version
+
+Exit codes: 0 all fail-on rules passed · 1 a fail-on rule failed · 2 usage / fetch error
+```
+
+### Check groups
+
+`--checks` takes group names, individual check (method) names, or a mix; output order is always catalogue order, however the flags were typed.
+
+| Group | Checks |
+|---|---|
+| `meta` | `metaTitle`, `metaDescription`, `canonicalTag`, `noindexTag`, `nofollowTag`, `robotsFile` |
+| `links` | `brokenLinks`, `inboundLinks`, `underscoredLinks`, `socialMedia`, `plaintextEmail` |
+| `content` | `header1`, `header2`, `imageAlt`, `codeContent`, `deprecatedHtml`, `frameset`, `inlineCss`, `objectCount`, `favicon`, `googleAnalytics` |
+| `headers` | `cache`, `characterSet`, `serverSignature`, `pageCompression` |
+| `network` | `https`, `spfRecord`, `domainLength` |
+| `performance` | `pageSpeed` |
+
+Without `--checks`, every group runs — except that the `network` group is skipped when the host is local (`localhost` and `*.localhost`, `127.*` loopback addresses, `[::1]`, and the `*.local` / `*.test` dev TLDs): HTTPS, SPF and domain length say nothing about a dev server. An explicit `--checks` is honoured exactly as given, local host or not.
+
+### Rules and `--fail-on`
+
+The checks report data; the rules judge it. Every run evaluates all 13 rules and prints a verdict per rule, but only the rules named in `--fail-on` can fail the run (exit code 1). A rule whose check was not selected is reported as `skip` and never fails the run, so a narrow `--checks` cannot trip `--fail-on` by accident.
+
+| Rule | Check | Fails when |
+|---|---|---|
+| `broken-links` | `brokenLinks` | any scanned link probes as an error status |
+| `missing-title` | `metaTitle` | the page has no (or an empty) `<title>` |
+| `missing-description` | `metaDescription` | no meta description |
+| `missing-canonical` | `canonicalTag` | no canonical tag |
+| `noindex` | `noindexTag` | the page declares `noindex` |
+| `not-https` | `https` | the page was not served over HTTPS |
+| `missing-h1` | `header1` | no `<h1>` on the page |
+| `multiple-h1` | `header1` | more than one `<h1>` |
+| `images-without-alt` | `imageAlt` | any `<img>` is missing an `alt` |
+| `plaintext-email` | `plaintextEmail` | an email address appears in the page's visible text |
+| `underscored-links` | `underscoredLinks` | a same-host link contains an underscore |
+| `deprecated-html` | `deprecatedHtml` | any deprecated HTML tag is found |
+| `no-robots-txt` | `robotsFile` | `/robots.txt` is absent |
+
+`--fail-on` also takes three presets: `recommended` expands to `broken-links`, `missing-title`, `missing-description`, `missing-canonical` and `not-https`; `all` expands to every rule; `none` expands to nothing (report only — the default when `--fail-on` is not given at all).
+
+### Output
+
+- `text` (default) — the report below; coloured when stdout is a TTY.
+- `md` — GitHub-flavoured Markdown, one verdict table per page with the raw check data collapsed; made for CI job summaries.
+- `json` — machine-readable: `{failed, pages: [{url, status, verdicts: [{rule, result, message, failsRun}], checks: {method: envelope}}]}` where each `envelope` is the unmodified check envelope from the library.
+
+`--output=FILE` writes the report to a file instead of stdout.
+
+### Config file
+
+The CLI reads `seo-checkup.json` from the current directory when it exists, or the file named by `--config`. Precedence is flags > file > defaults. Recognised keys: `url`, `paths`, `checks`, `fail-on`, `format`, `timeout`, `overrides`.
+
+```json
+{
+  "url": "https://example.com",
+  "paths": ["/", "/about", "/blog/hello-world"],
+  "checks": ["meta", "content"],
+  "fail-on": ["recommended"],
+  "format": "text",
+  "timeout": 30,
+  "overrides": {
+    "/blog/*": { "checks": ["meta", "links"], "fail-on": ["broken-links"] }
+  }
+}
+```
+
+`overrides` maps a path glob to per-page settings: each glob is matched with `fnmatch` against the resolved page URL's path (no query), and `*` crosses `/` — `/blog/*` matches `/blog/2026/01/post` too. The file is validated eagerly: an unknown rule or check name, an unknown `format`, or a non-positive `timeout` is an error (exit 2) before anything is fetched.
+
+### Example
+
+A real run, captured on 2026-08-20 against the live example.com; the exit code was 1 because `recommended` includes `missing-description` and `missing-canonical`, and example.com has neither:
+
+```
+$ seo-checkup https://example.com --checks=meta --fail-on=recommended
+
+https://example.com/ (HTTP 200)
+  SKIP  broken-links: check not run
+  PASS  missing-title [fail-on]: title present
+  FAIL  missing-description [fail-on]: no meta description
+  FAIL  missing-canonical [fail-on]: no canonical tag
+  PASS  noindex: indexable
+  SKIP  not-https: check not run
+  SKIP  missing-h1: check not run
+  SKIP  multiple-h1: check not run
+  SKIP  images-without-alt: check not run
+  SKIP  plaintext-email: check not run
+  SKIP  underscored-links: check not run
+  SKIP  deprecated-html: check not run
+  FAIL  no-robots-txt: no /robots.txt
+
+  Meta Title
+    Example Domain
+  Meta Description
+    ""
+  Canonical Tag
+    ""
+  Noindex Tag
+    false
+  Nofollow Tag
+    false
+  Robots File
+    false
+
+1 page checked, 1 failed.
+```
+
+## GitHub Action
+
+The repository doubles as a composite GitHub Action: on pull requests it checks the branch — either a preview URL your deploy produced, or a dev server the action starts in the runner — and on `master` it checks production. It writes the verdict tables to the job summary, uploads the JSON report as an artifact, and fails the step on exactly the rules you choose.
+
+### Inputs
+
+| Input | Default | Description |
+|---|---|---|
+| `url` | — | Page to check (a deployed site or preview URL). Required unless `serve` is set. |
+| `serve` | — | Shell command that starts a local server in the runner (e.g. `npm run dev -- --port 4321`). The page at `serve-url` is checked. |
+| `serve-url` | `http://localhost:3000` | URL where `serve` listens; the action waits for it before checking. |
+| `serve-timeout` | `60` | Seconds to wait for `serve-url` to answer. |
+| `paths` | — | Comma-separated paths resolved against the URL (e.g. `/,/about,/blog`). Default: just the URL. |
+| `checks` | — | Comma-separated groups and/or check names (meta, links, content, headers, network, performance, or e.g. metaTitle). Default: all (network checks skipped for local hosts). |
+| `fail-on` | — | Comma-separated rules or presets (all, recommended, none) whose failure fails the step. Default: none (report only). |
+| `config` | — | Path to a seo-checkup.json. Default: ./seo-checkup.json when present. |
+| `php-version` | `8.3` | PHP version for setup-php. |
+| `artifact` | `true` | Upload the JSON report as a workflow artifact (see `artifact-name`). |
+| `artifact-name` | `seo-checkup-report` | Name of the uploaded report artifact. Must be unique per workflow run — set it when the action runs more than once (matrix, several sites). |
+
+### Outputs
+
+| Output | Description |
+|---|---|
+| `failed` | `true` when a fail-on rule failed on any page, else `false`. |
+| `report` | Absolute path to the JSON report. |
+
+### Workflow
+
+```yaml
+name: SEO
+on:
+  pull_request:
+  push:
+    branches: [master]
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pull requests: run the branch locally and check it
+      - uses: ikidnapmyself/seo-checkup@v1
+        if: github.event_name == 'pull_request'
+        with:
+          serve: npm ci && npm run dev -- --port 4321
+          serve-url: http://localhost:4321
+      # master: check production
+      - uses: ikidnapmyself/seo-checkup@v1
+        if: github.ref == 'refs/heads/master'
+        with:
+          url: https://example.com
+```
+
+`fail-on`, `paths` and `checks` normally live in the repository's own `seo-checkup.json`, which the CLI auto-discovers after checkout — that keeps both steps this short, and the `url` input overrides the file's `url`, so the same file serves the PR step and the production step.
+
+If your deploy already produces a preview URL, check that instead of serving locally (note that `actions/deploy-pages` itself needs `pages: write` and `id-token: write` — the no-extra-permissions statement below is about the seo-checkup action only):
+
+```yaml
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - uses: ikidnapmyself/seo-checkup@v1
+        with:
+          url: ${{ steps.deployment.outputs.page_url }}
+```
+
+### Notes
+
+- The action needs no permissions beyond the default `contents: read`.
+- It installs PHP via setup-php (the `php-version` input) and the package via Composer: running the action at a release tag `vX.Y.Z` installs that package version, `vX` the latest release in that major, and a branch or SHA reference runs the action's own checkout. Use `@v1` for the latest 1.x, or pin `@v1.1.0`.
+- `artifact-name` must be unique per workflow run if the action runs more than once (matrix builds, several sites).
+- Runs against a local host (the `serve` mode's default) skip the `network` check group by default, like the CLI.
+- The Markdown job summary is produced by a second CLI run, so each page is fetched twice — a known v1 limitation.
+- `$GITHUB_STEP_SUMMARY` caps at 1 MiB; on big multi-page runs, narrow `--checks` (the raw check data dominates the summary's size).
 
 ## Checks
 
@@ -124,6 +337,8 @@ The library ships no allowlist of its own, because the right policy depends on y
 ```php
 $analyze = new SEOCheckup\Analyze('https://example.com', new MyHostAllowlistClient($guzzle));
 ```
+
+These caveats apply equally to the CLI and the GitHub Action, which fetch the same page-controlled URLs from wherever they run.
 
 ## Upgrading from 0.1
 
