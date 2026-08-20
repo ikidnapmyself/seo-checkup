@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Three renderers** (`SEOCheckup\Cli\Report`): `text` (ANSI-coloured on a TTY), `md` (verdict tables with raw check data collapsed, made for CI job summaries) and `json` (verdicts plus the unmodified check envelopes); `--output` writes any of them to a file.
 - **A composite GitHub Action** (`action.yml`): checks either a deployed `url` or a server the runner starts via `serve`/`serve-url`/`serve-timeout`, writes the Markdown report to the job summary, uploads the JSON report as an artifact (`artifact`, `artifact-name`), and exposes `failed` and `report` outputs. It installs PHP via setup-php (`php-version`) and the package via Composer: a `vX.Y.Z` action ref installs that release, `vX` the latest in that major, and a branch or SHA runs the action's own checkout.
 - **An `action-smoke` workflow** exercising the action end to end in four jobs: serve mode against a fixture site, url mode, url mode that must fail on a fail-on rule, and the neither-input error path.
-- **`tests/Cli/*`**: 87 hermetic tests (370 assertions) covering the parser, groups, config precedence and overrides, all 13 rules, the runner and the three renderers — like the library suite, without touching the network.
+- **`tests/Cli/*`**: 90 hermetic tests (375 assertions) covering the parser, groups, config precedence and overrides, all 13 rules, the runner and the three renderers — like the library suite, without touching the network.
 
 ### Changed
 
