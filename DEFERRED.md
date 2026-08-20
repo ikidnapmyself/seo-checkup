@@ -1,6 +1,6 @@
 # Deferred register
 
-This is the register promised at the end of phase 1 of the 1.0.0 modernization: everything considered and knowingly not built in this release, why it was deferred, and what it would be worth. The agreed next phase is a CLI and a self-contained PHAR.
+This is the register promised at the end of phase 1 of the 1.0.0 modernization: everything considered and knowingly not built in this release, why it was deferred, and what it would be worth. The next phase happened: 1.1.0 shipped the CLI and the GitHub Action, and the rows below are updated to match.
 
 | Item | Why deferred | Value |
 |---|---|---|
@@ -8,9 +8,13 @@ This is the register promised at the end of phase 1 of the 1.0.0 modernization: 
 | GA4 / GTM detection | `googleAnalytics()` matches only the legacy `UA-XXXXX-X` format. `UA-` IDs are effectively dead; detecting `G-` (GA4) and `GTM-` (Tag Manager) is a new check, not a fix to the existing one. | High |
 | Public Suffix List for `domainLength()` | `domainLength()` strips only the final label of the host, so `example.co.uk` measures as `example.co` instead of stripping the registrable domain's public suffix (`co.uk`). Correct extraction needs the Public Suffix List, which is a new dependency. Defect 9 in the CHANGELOG fixed the crash on hostless URLs but deliberately left this measurement rule unchanged. | Medium |
 | PSR-7 / raw-HTML input source | `Analyze` only ever fetches a live URL. Accepting a pre-fetched PSR-7 response or raw HTML string is a new input surface, not a fix. | Medium |
-| Verdicts, severities, budgets | Every check currently returns raw data with no pass/fail judgment, severity, or numeric budget attached. Building that is a new output layer over all 29 checks. | Medium |
-| CLI + self-contained PHAR | The agreed next phase after this one. | Medium |
-| Docker image, GitHub Action | Downstream of the CLI; blocked on it existing first. | Low |
+| Verdicts, severities, budgets | 1.1.0 added a pass/fail rule catalogue in the CLI (`SEOCheckup\Cli\Rules`) over 13 of the checks, which covers the verdict half for CLI/Action consumers. The library itself still returns raw data with no judgment attached; severities, numeric budgets and the typed envelope remain deferred. | Medium |
+| Self-contained PHAR | The CLI shipped in 1.1.0 as `bin/seo-checkup` via Composer, and the GitHub Action installs through Composer too, so the PHAR is no longer needed for the Action. A single-file distribution stays deferred. | Low |
+| Docker image | The GitHub Action shipped in 1.1.0 as a composite action (Composer install, no container). A published Docker image stays deferred. | Low |
+| PR comment reporting for the Action | Posting the report as a PR comment needs `pull-requests: write` from every consumer; the job summary + artifact combination was chosen for v1 because it needs no permissions beyond `contents: read`. | Medium |
+| One fetch for both JSON and Markdown output | The Action runs the CLI twice — once for the JSON report, once for the job summary — so every page is fetched twice. A multi-format flag (one run, several renderers) would avoid it. | Low |
+| More rules / expression-based fail-on | The rule catalogue is fixed at 13 named rules; an expression mini-language for `--fail-on` (thresholds, combinators) was considered and rejected for v1 in favour of names and presets. | Low |
+| `Checks::isLocal()` heuristics | The local-host detection that skips the `network` group covers `localhost`/`*.localhost`, `127.*`, `[::1]`, `*.local` and `*.test`, but no RFC 1918 ranges (`10.*`, `192.168.*`, …). An explicit `--checks` already bypasses the heuristic entirely. | Low |
 | Wider 2026 SEO catalogue | Structured data / JSON-LD, Core Web Vitals, hreflang, sitemap validation and similar are new checks, out of scope for a polish-only release. | Low |
 | AI/LLM analysis layer | An entirely new subsystem layered on top of the raw check output. | Low |
 | The `999` carve-out in `brokenLinks()` is unreachable in production | `brokenLinks()` treats HTTP `999` (LinkedIn's non-standard bot-block response) as passed rather than an error via `$status !== 999`. But `GuzzleHttp\Psr7\Response` rejects status codes outside 100–599, so a real `999` response never reaches that comparison — it becomes a transport failure instead, `Fetcher::status()` returns `0`, and the link is bucketed as `"HTTP 0"` under errors. The carve-out is dead code against Guzzle's default (curl) handler. Discovered during Task 11's defect-10 fix; human ruling on 2026-08-13 was to log it and move on rather than rework the fetch layer for one non-standard status code. | Low — cosmetic bucketing of an edge case that already lands in "errors" either way. |
