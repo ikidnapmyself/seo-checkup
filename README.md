@@ -254,7 +254,7 @@ jobs:
 
 `fail-on`, `paths` and `checks` normally live in the repository's own `seo-checkup.json`, which the CLI auto-discovers after checkout — that keeps both steps this short, and the `url` input overrides the file's `url`, so the same file serves the PR step and the production step.
 
-If your deploy already produces a preview URL, check that instead of serving locally:
+If your deploy already produces a preview URL, check that instead of serving locally (note that `actions/deploy-pages` itself needs `pages: write` and `id-token: write` — the no-extra-permissions statement below is about the seo-checkup action only):
 
 ```yaml
       - id: deployment

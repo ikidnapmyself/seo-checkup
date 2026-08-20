@@ -106,6 +106,30 @@ final class ConfigTest extends TestCase
         Config::build(new Options(url: 'https://x'), $this->tempJson('{"overrides": {"/*": {"fail-on": ["bogus"]}}}'));
     }
 
+    public function testUnknownCheckInFileFailsAtBuild(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Unknown check or group: bogus');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{"checks": ["meta", "bogus"]}'));
+    }
+
+    public function testUnknownCheckInAnUnmatchedOverrideFailsAtBuild(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Unknown check or group: bogus');
+        Config::build(new Options(url: 'https://x'), $this->tempJson('{"overrides": {"/never-matches/*": {"checks": ["bogus"]}}}'));
+    }
+
+    public function testValidGroupNamesInFileAndOverridePassAtBuild(): void
+    {
+        $c = Config::build(
+            new Options(url: 'https://x'),
+            $this->tempJson('{"checks": ["meta", "metaTitle"], "overrides": {"/blog/*": {"checks": ["links"]}}}')
+        );
+
+        self::assertSame(['meta', 'metaTitle'], $c->checks);
+    }
+
     public function testNoPathsMeansJustTheUrl(): void
     {
         $c = Config::build(new Options(url: 'https://example.com/base/page'), null);

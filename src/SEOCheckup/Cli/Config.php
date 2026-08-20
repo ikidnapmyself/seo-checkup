@@ -53,7 +53,7 @@ final class Config
         return new self(
             url: $url,
             paths: $o->paths ?? self::list($data, 'paths') ?? [],
-            checks: $o->checks ?? self::list($data, 'checks'),
+            checks: self::validateChecks($o->checks ?? self::list($data, 'checks')),
             failOn: RuleCatalogue::expand($o->failOn ?? self::list($data, 'fail-on')),
             format: $format,
             output: $o->output,
@@ -151,6 +151,33 @@ final class Config
     }
 
     /**
+     * Name validation only — every item must be a group or a check name, so a
+     * typo in the file or an override fails before anything is fetched.
+     * Checks::resolve() still does the real per-page resolution (including
+     * the local-host network skip).
+     *
+     * @param list<string>|null $checks
+     * @return list<string>|null
+     * @throws UsageException on an unknown or empty selection
+     */
+    private static function validateChecks(?array $checks): ?array
+    {
+        if ($checks === null) {
+            return null;
+        }
+        if ($checks === []) {
+            throw new UsageException('checks must name at least one check or group');
+        }
+        foreach ($checks as $item) {
+            if (!isset(Checks::GROUPS[$item]) && !in_array($item, Checks::all(), true)) {
+                throw new UsageException("Unknown check or group: {$item}");
+            }
+        }
+
+        return $checks;
+    }
+
+    /**
      * @param array<string, mixed> $d
      * @throws UsageException if present but not a positive integer
      */
@@ -198,7 +225,7 @@ final class Config
             /** @var array<string, mixed> $o */
             $entry = [];
             if (array_key_exists('checks', $o)) {
-                $entry['checks'] = self::list($o, 'checks');
+                $entry['checks'] = self::validateChecks(self::list($o, 'checks'));
             }
             if (array_key_exists('fail-on', $o)) {
                 $entry['fail-on'] = RuleCatalogue::expand(self::list($o, 'fail-on') ?? []);
