@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.2] - 2026-08-21
+
+### Added
+
+- A GitHub Marketplace badge in the README, linking to the [published listing](https://github.com/marketplace/actions/seo-checkup). Documentation only; nothing in the library, CLI or action changed.
+
 ## [1.1.1] - 2026-08-21
 
 ### Changed
