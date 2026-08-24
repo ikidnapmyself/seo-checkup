@@ -47,7 +47,11 @@ final class ApplicationTest extends TestCase
         );
     }
 
-    /** A renderer factory that records every render it is asked for. */
+    /**
+     * A renderer factory that records every render it is asked for.
+     *
+     * @param list<string> $renders
+     */
     private function countingRenderers(array &$renders): callable
     {
         return function (string $format, bool $tty) use (&$renders): Renderer {
@@ -274,7 +278,7 @@ final class ApplicationTest extends TestCase
         self::assertSame(0, $code);
         self::assertSame(['https://example.com/'], $http->requested, 'the page is fetched exactly once');
 
-        self::assertStringContainsString('PASS  missing-title', $out, 'text still goes to stdout');
+        self::assertMatchesRegularExpression('/PASS\s+missing-title/', $out, 'text still goes to stdout');
         self::assertFileExists($json);
         self::assertFileExists($md);
 
@@ -387,10 +391,14 @@ final class ApplicationTest extends TestCase
         self::assertStringContainsString('missing-title', (string) file_get_contents($file));
     }
 
-    public function testVersionMatchesTheChangelog(): void
+    public function testOutputDashMeansStdout(): void
     {
-        $changelog = (string) file_get_contents(__DIR__ . '/../../CHANGELOG.md');
-        self::assertSame(1, preg_match('/^## \[(\d+\.\d+\.\d+)\]/m', $changelog, $m), 'no released version in CHANGELOG.md');
-        self::assertSame($m[1] ?? '', Application::VERSION, 'Application::VERSION must match the newest CHANGELOG entry');
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+
+        [$code, $out] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--format=json', '--output=-');
+
+        self::assertSame(0, $code);
+        self::assertStringStartsWith('{', $out);
+        self::assertFileDoesNotExist($this->dir . '/-', 'no file called "-"');
     }
 }

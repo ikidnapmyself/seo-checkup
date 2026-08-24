@@ -145,7 +145,7 @@ final class Application
                                      skipped for localhost / *.local / *.test hosts)
           --fail-on=broken-links,…   Rules or presets (all, recommended, none) that fail the run
           --format=text|md|json      Output format; default: text
-          --output=FILE              Write the report to FILE instead of stdout
+          --output=FILE              Write the report to FILE instead of stdout ("-" = stdout)
           --text=FILE                Also write the text report to FILE ("-" = stdout)
           --md=FILE                  Also write the Markdown report to FILE ("-" = stdout)
           --json=FILE                Also write the JSON report to FILE ("-" = stdout)

@@ -16,6 +16,8 @@ final class ArgvParser
         $url = null;
         /** @var array<string, string> $values */
         $values = [];
+        /** @var array<string, string> $sinks */
+        $sinks = [];
         $help = $version = false;
 
         foreach ($args as $arg) {
@@ -40,6 +42,9 @@ final class ArgvParser
                 if ($value === '' && in_array($name, [...self::SINK_OPTIONS, 'output', 'config'], true)) {
                     throw new UsageException("--{$name} needs a value: --{$name}=\u{2026}");
                 }
+                if (in_array($name, self::SINK_OPTIONS, true)) {
+                    $sinks[$name] = $value;
+                }
                 $values[$name] = $value;
                 continue;
             }
@@ -52,14 +57,6 @@ final class ArgvParser
         $format = $values['format'] ?? null;
         if ($format !== null && !in_array($format, Options::FORMATS, true)) {
             throw new UsageException('--format must be one of ' . implode(', ', Options::FORMATS));
-        }
-
-        // Kept in the order they were given; Config puts them in canonical order.
-        $sinks = [];
-        foreach ($values as $name => $value) {
-            if (in_array($name, self::SINK_OPTIONS, true)) {
-                $sinks[$name] = $value;
-            }
         }
 
         $timeout = null;

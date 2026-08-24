@@ -51,7 +51,7 @@ final class ConfigTest extends TestCase
         self::assertSame([], $c->paths);
         self::assertNull($c->checks);
         self::assertSame([], $c->failOn);
-        self::assertSame('text', $c->format);
+        self::assertSame('text', $c->sinks[0]->format);
         self::assertSame(15, $c->timeout);
     }
 
@@ -63,7 +63,7 @@ final class ConfigTest extends TestCase
         self::assertSame(['/', '/blog/post'], $c->paths);
         self::assertSame(['meta'], $c->checks);
         self::assertSame(['broken-links', 'missing-title', 'missing-description', 'missing-canonical', 'not-https'], $c->failOn);
-        self::assertSame('json', $c->format);
+        self::assertSame('json', $c->sinks[0]->format);
         self::assertSame(30, $c->timeout);
     }
 
@@ -74,7 +74,7 @@ final class ConfigTest extends TestCase
         self::assertSame(['/a'], $c->paths);
         self::assertSame(['links'], $c->checks);
         self::assertSame([], $c->failOn);
-        self::assertSame('md', $c->format);
+        self::assertSame('md', $c->sinks[0]->format);
         self::assertSame(5, $c->timeout);
     }
 
