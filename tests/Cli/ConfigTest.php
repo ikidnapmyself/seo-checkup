@@ -224,11 +224,48 @@ final class ConfigTest extends TestCase
         );
     }
 
+    public function testUnknownSinkFormatIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Unknown output format: jsonn');
+        Config::build(new Options(url: 'https://example.com', sinks: ['jsonn' => 'x.json']), null);
+    }
+
     public function testTwoSinksOnStdoutIsAUsageError(): void
     {
         $this->expectException(UsageException::class);
-        $this->expectExceptionMessage('only one format can go to stdout');
+        $this->expectExceptionMessage('--format and --json both target stdout; give one of them a file');
         Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), null);
+    }
+
+    public function testTheErrorNamesTheFlagsTheUserTyped(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--output and --json both target stdout; give one of them a file');
+        Config::build(new Options(url: 'https://example.com', output: '-', sinks: ['json' => '-']), null);
+    }
+
+    public function testThreeCollidingSinksReadGrammatically(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--format, --md and --json all target stdout; give each of them its own file');
+        Config::build(new Options(url: 'https://example.com', sinks: ['md' => '-', 'json' => '-']), null);
+    }
+
+    public function testTwoSinksOnTheSameFileIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--output and --json both target both.txt; give one of them a different file');
+        Config::build(new Options(url: 'https://example.com', output: 'both.txt', sinks: ['json' => 'both.txt']), null);
+    }
+
+    public function testIdenticalFormatAndTargetIsDedupedNotAnError(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', sinks: ['text' => '-']), null);
+        self::assertSame([['text', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
+
+        $c = Config::build(new Options(url: 'https://example.com', output: 'r.txt', sinks: ['text' => 'r.txt']), null);
+        self::assertSame([['text', 'r.txt']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
     }
 
     public function testASinkOnStdoutIsFineWhenThePrimaryIsAFile(): void
@@ -241,7 +278,14 @@ final class ConfigTest extends TestCase
     {
         // format=json in the file means the primary is json on stdout.
         $this->expectException(UsageException::class);
-        $this->expectExceptionMessage('only one format can go to stdout');
-        Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), $this->tempJson('{"format": "json"}'));
+        $this->expectExceptionMessage('--format and --md both target stdout');
+        Config::build(new Options(url: 'https://example.com', sinks: ['md' => '-']), $this->tempJson('{"format": "json"}'));
+    }
+
+    public function testTheSameFormatFromTheFileAndASinkFlagIsDeduped(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), $this->tempJson('{"format": "json"}'));
+
+        self::assertSame([['json', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
     }
 }

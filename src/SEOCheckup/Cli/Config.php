@@ -67,26 +67,64 @@ final class Config
      * The primary (--format/--output, default text on stdout) followed by the
      * per-format sinks in a fixed order, so output is deterministic.
      *
+     * An identical (format, target) pair asked for twice is the same bytes in
+     * the same place, so it collapses to one sink; two *different* formats on
+     * one target would clobber each other and is a usage error.
+     *
      * @return list<Sink>
+     * @throws UsageException on an unknown sink format or a clobbering target
      */
     private static function sinks(string $format, Options $o): array
     {
-        $sinks = [new Sink($format, $o->output ?? Sink::STDOUT)];
-
-        foreach (Options::FORMATS as $f) {
-            if (isset($o->sinks[$f])) {
-                $sinks[] = new Sink($f, $o->sinks[$f]);
+        foreach (array_keys($o->sinks) as $f) {
+            if (!in_array($f, Options::FORMATS, true)) {
+                throw new UsageException("Unknown output format: {$f} (expected one of " . implode(', ', Options::FORMATS) . ')');
             }
         }
 
-        $onStdout = array_values(array_filter($sinks, fn (Sink $s) => $s->isStdout()));
-        if (count($onStdout) > 1) {
-            $names = implode(' and ', array_map(fn (Sink $s) => $s->format, $onStdout));
+        $sinks = [new Sink($format, $o->output ?? Sink::STDOUT, $o->output !== null ? '--output' : '--format')];
 
-            throw new UsageException("only one format can go to stdout ({$names} both target it; give one of them a file)");
+        foreach (Options::FORMATS as $f) {
+            if (isset($o->sinks[$f])) {
+                $sinks[] = new Sink($f, $o->sinks[$f], "--{$f}");
+            }
         }
 
-        return $sinks;
+        /** @var array<string, list<Sink>> $byTarget */
+        $byTarget = [];
+        $kept     = [];
+        foreach ($sinks as $sink) {
+            $same = array_filter($byTarget[$sink->target] ?? [], fn (Sink $s) => $s->format === $sink->format);
+            if ($same !== []) {
+                continue; // the same report to the same place, asked for twice
+            }
+            $byTarget[$sink->target][] = $sink;
+            $kept[] = $sink;
+        }
+
+        foreach ($byTarget as $target => $group) {
+            if (count($group) > 1) {
+                throw new UsageException(self::collisionMessage((string) $target, $group));
+            }
+        }
+
+        return $kept;
+    }
+
+    /**
+     * @param non-empty-list<Sink> $group two or more sinks aimed at one target
+     */
+    private static function collisionMessage(string $target, array $group): string
+    {
+        $flags = array_map(fn (Sink $s) => $s->origin, $group);
+        $last  = array_pop($flags);
+        $names = implode(', ', $flags) . ' and ' . $last;
+        $where = $group[0]->isStdout() ? 'stdout' : $target;
+        $fix   = $group[0]->isStdout() ? 'a file' : 'a different file';
+
+        return count($group) === 2
+            ? "{$names} both target {$where}; give one of them {$fix}"
+            : "{$names} all target {$where}; give each of them its own file";
     }
 
     /**

@@ -287,8 +287,32 @@ final class ApplicationTest extends TestCase
         [$code, , $err] = $this->runApp($this->app($http), 'https://example.com/', '--json=-');
 
         self::assertSame(2, $code);
-        self::assertStringContainsString('only one format can go to stdout', $err);
+        self::assertStringContainsString('--format and --json both target stdout', $err);
         self::assertSame([], $http->requested, 'nothing was fetched');
+    }
+
+    public function testTwoSinksOnTheSameFileExitsTwoBeforeFetching(): void
+    {
+        $http = new FakeHttpClient();
+        $file = $this->dir . '/both.txt';
+
+        [$code, , $err] = $this->runApp($this->app($http), 'https://example.com/', "--output={$file}", "--json={$file}");
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString("--output and --json both target {$file}", $err);
+        self::assertFileDoesNotExist($file);
+        self::assertSame([], $http->requested, 'nothing was fetched');
+    }
+
+    public function testTheSameFormatToTheSameFileTwiceIsFine(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/report.txt';
+
+        [$code] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', "--output={$file}", "--text={$file}");
+
+        self::assertSame(0, $code);
+        self::assertStringContainsString('missing-title', (string) file_get_contents($file));
     }
 
     public function testVersionMatchesTheChangelog(): void
