@@ -23,13 +23,26 @@ final class Application
     /** @var \Closure(string, int): Analyze */
     private readonly \Closure $factory;
 
+    /** @var \Closure(resource): bool */
+    private readonly \Closure $isTty;
+
+    /** @var \Closure(string, bool): Report\Renderer */
+    private readonly \Closure $renderers;
+
     /**
      * @param (callable(string, int): Analyze)|null $factory (url, timeout seconds) → Analyze.
      *        null builds a Guzzle client honouring --timeout; tests inject a fake.
+     * @param (callable(resource): bool)|null $isTty is this stream a terminal?
+     *        null uses stream_isatty(); tests inject a fixed answer, since a
+     *        php://memory stdout is never a tty.
+     * @param (callable(string, bool): Report\Renderer)|null $renderers (format, colour) → Renderer.
+     *        null uses self::renderer(); tests inject a factory that counts renders.
      */
-    public function __construct(?callable $factory = null)
+    public function __construct(?callable $factory = null, ?callable $isTty = null, ?callable $renderers = null)
     {
-        $this->factory = $factory !== null ? $factory(...) : self::defaultFactory(...);
+        $this->factory   = $factory !== null ? $factory(...) : self::defaultFactory(...);
+        $this->isTty     = $isTty !== null ? $isTty(...) : stream_isatty(...);
+        $this->renderers = $renderers !== null ? $renderers(...) : self::renderer(...);
     }
 
     /**
@@ -76,10 +89,10 @@ final class Application
 
             foreach ($config->sinks as $sink) {
                 // Colour only a text report going to a terminal; a file always gets plain text.
-                $tty = $sink->isStdout() && stream_isatty($stdout);
+                $tty = $sink->format === 'text' && $sink->isStdout() && ($this->isTty)($stdout);
                 $key = $sink->format . ($tty ? ':tty' : '');
 
-                $rendered[$key] ??= self::renderer($sink->format, $tty)->render($pages, $failed);
+                $rendered[$key] ??= ($this->renderers)($sink->format, $tty)->render($pages, $failed);
 
                 if ($sink->isStdout()) {
                     fwrite($stdout, $rendered[$key]);
@@ -103,7 +116,8 @@ final class Application
         }
     }
 
-    private static function renderer(string $format, bool $tty): Report\Renderer
+    /** Public so a test can wrap it in a counting factory. */
+    public static function renderer(string $format, bool $tty): Report\Renderer
     {
         return match ($format) {
             'json'  => new Report\JsonRenderer(),

@@ -8,6 +8,7 @@ use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use SEOCheckup\Analyze;
 use SEOCheckup\Cli\Application;
+use SEOCheckup\Cli\Report\Renderer;
 use SEOCheckup\Tests\Support\FakeDnsLookup;
 use SEOCheckup\Tests\Support\FakeHttpClient;
 
@@ -35,11 +36,25 @@ final class ApplicationTest extends TestCase
         rmdir($this->dir);
     }
 
-    private function app(?FakeHttpClient $http = null): Application
+    private function app(?FakeHttpClient $http = null, ?callable $isTty = null, ?callable $renderers = null): Application
     {
         $http ??= new FakeHttpClient();
 
-        return new Application(fn (string $url, int $timeout) => new Analyze($url, $http, new FakeDnsLookup()));
+        return new Application(
+            fn (string $url, int $timeout) => new Analyze($url, $http, new FakeDnsLookup()),
+            $isTty,
+            $renderers,
+        );
+    }
+
+    /** A renderer factory that records every render it is asked for. */
+    private function countingRenderers(array &$renders): callable
+    {
+        return function (string $format, bool $tty) use (&$renders): Renderer {
+            $renders[] = $format . ($tty ? ':tty' : '');
+
+            return Application::renderer($format, $tty);
+        };
     }
 
     /** @return array{int, string, string} exit code, stdout, stderr */
@@ -269,15 +284,56 @@ final class ApplicationTest extends TestCase
         self::assertStringContainsString('| Rule | Result |', (string) file_get_contents($md));
     }
 
-    public function testTextSinkToAFileIsNotColoured(): void
+    public function testOnATtyStdoutIsColouredAndTheFileSinkIsNot(): void
     {
         $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
         $file = $this->dir . '/report.txt';
+        $app  = $this->app($http, fn ($stream): bool => true);
 
-        [$code] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', "--text={$file}");
+        [$code, $out] = $this->runApp($app, 'https://example.com/', '--checks=metaTitle', "--text={$file}");
 
         self::assertSame(0, $code);
-        self::assertStringNotContainsString("\e[", (string) file_get_contents($file));
+        self::assertStringContainsString("\e[", $out, 'the text report on a terminal is coloured');
+        self::assertStringNotContainsString("\e[", (string) file_get_contents($file), 'a file always gets plain text');
+    }
+
+    public function testEachDistinctFormatIsRenderedOnce(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $a = $this->dir . '/a.json';
+        $b = $this->dir . '/b.json';
+        $renders = [];
+
+        [$code] = $this->runApp(
+            $this->app($http, null, $this->countingRenderers($renders)),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--format=json',
+            "--output={$a}",
+            "--json={$b}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['json'], $renders, 'two json sinks share one render');
+        self::assertSame((string) file_get_contents($a), (string) file_get_contents($b));
+    }
+
+    public function testATtyDoesNotMakeANonTextFormatRenderTwice(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/b.json';
+        $renders = [];
+
+        [$code] = $this->runApp(
+            $this->app($http, fn ($stream): bool => true, $this->countingRenderers($renders)),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--format=json',
+            "--json={$file}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['json'], $renders, 'only a text report cares about the terminal');
     }
 
     public function testSinkPathInAMissingDirectoryFailsBeforeFetching(): void
