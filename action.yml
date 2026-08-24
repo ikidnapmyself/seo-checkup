@@ -81,6 +81,7 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
       run: |
         echo "::group::Install seo-checkup"
+        trap 'echo "::endgroup::"' EXIT
         # A release tag (v1.2.3) installs that version; a major tag (v1) the latest
         # in that major; anything else (branch, sha, local "./") runs the action's
         # own checkout, so the smoke workflow tests the code under review.
@@ -96,7 +97,6 @@ runs:
         fi
         echo "$bin" >> "$GITHUB_PATH"
         "$bin/seo-checkup" --version
-        echo "::endgroup::"
 
     - name: Start server
       if: inputs.serve != ''
