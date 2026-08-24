@@ -202,7 +202,7 @@ https://example.com/ (HTTP 200)
 
 ## GitHub Action
 
-The repository doubles as a composite GitHub Action: on pull requests it checks the branch — either a preview URL your deploy produced, or a dev server the action starts in the runner — and on `master` it checks production. It writes the verdict tables to the job summary, uploads the JSON report as an artifact, and fails the step on exactly the rules you choose.
+The repository doubles as a composite GitHub Action: on pull requests it checks the branch — either a preview URL your deploy produced, or a dev server the action starts in the runner — and on `master` it checks production. It prints the report in the step log, writes the verdict tables to the job summary, annotates every failed rule (`error` when it fails the step, `warning` otherwise), uploads the JSON report as an artifact, and fails the step on exactly the rules you choose.
 
 ### Inputs
 
@@ -271,7 +271,7 @@ If your deploy already produces a preview URL, check that instead of serving loc
 - It installs PHP via setup-php (the `php-version` input) and the package via Composer: running the action at a release tag `vX.Y.Z` installs that package version, `vX` the latest release in that major, and a branch or SHA reference runs the action's own checkout. Use `@v1` for the latest 1.x, or pin `@v1.1.0`.
 - `artifact-name` must be unique per workflow run if the action runs more than once (matrix builds, several sites).
 - Runs against a local host (the `serve` mode's default) skip the `network` check group by default, like the CLI.
-- The Markdown job summary is produced by a second CLI run, so each page is fetched twice — a known v1 limitation.
+- The step log and the job summary are produced by extra CLI runs, so each page is fetched three times — a known limitation, see DEFERRED.md.
 - `$GITHUB_STEP_SUMMARY` caps at 1 MiB; on big multi-page runs, narrow `--checks` (the raw check data dominates the summary's size).
 
 ## Checks
