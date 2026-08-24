@@ -144,7 +144,9 @@ runs:
         [ -f "$report" ] && echo "report=$report" >> "$GITHUB_OUTPUT"
 
         if [ "$code" -le 1 ]; then
-          # Second pass for the human-readable summary (the CLI writes one format per run).
+          # Extra passes for the humans (the CLI writes one format per run):
+          # text to the step log, Markdown to the job summary.
+          seo-checkup "${args[@]}" --format=text || true
           seo-checkup "${args[@]}" --format=md --output="$summary" || true
           [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
         fi
