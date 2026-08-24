@@ -156,7 +156,7 @@ final class ApplicationTest extends TestCase
         self::assertStringContainsString('"pages"', (string) file_get_contents($file));
     }
 
-    public function testUnwritableOutputIsAUsageErrorExitTwo(): void
+    public function testOutputInAMissingDirectoryFailsBeforeFetching(): void
     {
         $http = (new FakeHttpClient())->route('https://example.com/', '<html></html>');
         [$code, $out, $err] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--output=' . $this->dir . '/missing-dir/report.txt');
@@ -164,6 +164,21 @@ final class ApplicationTest extends TestCase
         self::assertSame(2, $code);
         self::assertSame('', $out);
         self::assertStringContainsString('Could not write', $err);
+        self::assertStringContainsString('is not a directory', $err);
+        self::assertSame([], $http->requested, 'the crawl is not wasted');
+    }
+
+    public function testAWriteFailureIsNotReportedAsAUsageProblem(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html></html>');
+        // The directory itself: dirname() exists, so only the write can fail.
+        [$code, $out, $err] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--output=' . $this->dir);
+
+        self::assertSame(2, $code);
+        self::assertSame('', $out);
+        self::assertStringContainsString("Could not write {$this->dir}: ", $err);
+        self::assertStringContainsString('Is a directory', $err);
+        self::assertStringNotContainsString("Run 'seo-checkup --help'", $err, 'a disk error is not a usage problem');
     }
 
     public function testConfigFileIsAutoDiscoveredAndFlagsWin(): void
@@ -265,7 +280,7 @@ final class ApplicationTest extends TestCase
         self::assertStringNotContainsString("\e[", (string) file_get_contents($file));
     }
 
-    public function testUnwritableSinkPathExitsTwo(): void
+    public function testSinkPathInAMissingDirectoryFailsBeforeFetching(): void
     {
         $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
 
@@ -278,6 +293,7 @@ final class ApplicationTest extends TestCase
 
         self::assertSame(2, $code);
         self::assertStringContainsString('Could not write', $err);
+        self::assertSame([], $http->requested, 'the crawl is not wasted');
     }
 
     public function testTwoFormatsOnStdoutExitsTwoBeforeFetching(): void

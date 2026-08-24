@@ -84,12 +84,14 @@ final class Application
                 if ($sink->isStdout()) {
                     fwrite($stdout, $rendered[$key]);
                 } elseif (@file_put_contents($sink->target, $rendered[$key]) === false) {
-                    throw new UsageException("Could not write {$sink->target}");
+                    $reason = error_get_last()['message'] ?? '';
+
+                    throw new OutputException("Could not write {$sink->target}: {$reason}");
                 }
             }
 
             return $failed ? self::EXIT_FAILED : self::EXIT_OK;
-        } catch (FetchException $e) {
+        } catch (FetchException | OutputException $e) {
             fwrite($stderr, "seo-checkup: {$e->getMessage()}\n");
 
             return self::EXIT_USAGE;

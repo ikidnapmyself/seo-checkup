@@ -224,6 +224,13 @@ final class ConfigTest extends TestCase
         );
     }
 
+    public function testATargetInAMissingDirectoryIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('is not a directory');
+        Config::build(new Options(url: 'https://example.com', sinks: ['json' => $this->tempCwd . '/nope/r.json']), null);
+    }
+
     public function testUnknownSinkFormatIsAUsageError(): void
     {
         $this->expectException(UsageException::class);

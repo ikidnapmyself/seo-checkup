@@ -108,6 +108,8 @@ final class Config
             }
         }
 
+        self::preflight($kept);
+
         return $kept;
     }
 
@@ -125,6 +127,27 @@ final class Config
         return count($group) === 2
             ? "{$names} both target {$where}; give one of them {$fix}"
             : "{$names} all target {$where}; give each of them its own file";
+    }
+
+    /**
+     * Best effort: a target whose directory does not exist can never be
+     * written, so say so now rather than after crawling every page and
+     * throwing the reports away.
+     *
+     * @param list<Sink> $sinks
+     * @throws UsageException on a target in a directory that does not exist
+     */
+    private static function preflight(array $sinks): void
+    {
+        foreach ($sinks as $sink) {
+            if ($sink->isStdout()) {
+                continue;
+            }
+            $dir = \dirname($sink->target);
+            if (!is_dir($dir)) {
+                throw new UsageException("Could not write {$sink->target}: {$dir} is not a directory");
+            }
+        }
     }
 
     /**
