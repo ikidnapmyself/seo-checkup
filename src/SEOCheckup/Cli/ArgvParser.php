@@ -36,7 +36,11 @@ final class ArgvParser
                 if ($eq === false) {
                     throw new UsageException("--{$name} needs a value: --{$name}=…");
                 }
-                $values[$name] = substr($arg, $eq + 1);
+                $value = substr($arg, $eq + 1);
+                if ($value === '' && in_array($name, [...self::SINK_OPTIONS, 'output', 'config'], true)) {
+                    throw new UsageException("--{$name} needs a value: --{$name}=\u{2026}");
+                }
+                $values[$name] = $value;
                 continue;
             }
             if ($url !== null) {

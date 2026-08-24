@@ -100,6 +100,32 @@ final class ArgvParserTest extends TestCase
         ArgvParser::parse(['https://example.com', '--json']);
     }
 
+    public function testEmptySinkValueThrows(): void
+    {
+        foreach (['text', 'md', 'json'] as $name) {
+            try {
+                ArgvParser::parse(['https://example.com', "--{$name}="]);
+                self::fail("--{$name}= should be a usage error");
+            } catch (UsageException $e) {
+                self::assertSame("--{$name} needs a value: --{$name}=\u{2026}", $e->getMessage());
+            }
+        }
+    }
+
+    public function testEmptyOutputValueThrows(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--output needs a value');
+        ArgvParser::parse(['https://example.com', '--output=']);
+    }
+
+    public function testEmptyConfigValueThrows(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--config needs a value');
+        ArgvParser::parse(['https://example.com', '--config=']);
+    }
+
     public function testLastSinkFlagWinsForTheSameFormat(): void
     {
         $o = ArgvParser::parse(['https://example.com', '--json=a.json', '--json=b.json']);
