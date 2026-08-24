@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.3] - 2026-08-24
+
+### Added
+
+- **Readable step log for the Action.** The `Run seo-checkup` step now prints the CLI's `text` report (`PASS`/`FAIL`/`SKIP` per rule), so the result is visible without opening the job summary or the artifact. Each failed rule is also emitted as a GitHub annotation: `::error` when it failed the step (a `fail-on` hit), `::warning` otherwise. No new permissions; the Composer install output is collapsed in a log group. Costs one more fetch per page (three in total).
+
 ## [1.1.2] - 2026-08-21
 
 ### Added

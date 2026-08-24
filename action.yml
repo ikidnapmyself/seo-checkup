@@ -80,6 +80,8 @@ runs:
         ACTION_REF: ${{ github.action_ref }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
+        echo "::group::Install seo-checkup"
+        trap 'echo "::endgroup::"' EXIT
         # A release tag (v1.2.3) installs that version; a major tag (v1) the latest
         # in that major; anything else (branch, sha, local "./") runs the action's
         # own checkout, so the smoke workflow tests the code under review.
@@ -144,9 +146,23 @@ runs:
         [ -f "$report" ] && echo "report=$report" >> "$GITHUB_OUTPUT"
 
         if [ "$code" -le 1 ]; then
-          # Second pass for the human-readable summary (the CLI writes one format per run).
+          # Extra passes for the humans (the CLI writes one format per run):
+          # text to the step log, Markdown to the job summary.
+          seo-checkup "${args[@]}" --format=text || true
           seo-checkup "${args[@]}" --format=md --output="$summary" || true
           [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        # One annotation per failed rule: error when it failed the run, warning otherwise.
+        # Workflow-command messages must escape %, CR and LF. (Note: the text, md and
+        # annotation passes are independent runs of the CLI.)
+        if [ "$code" -le 1 ] && [ -f "$report" ]; then
+          jq -r '
+            def esc: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            .pages[] as $p | $p.verdicts[] | select(.result == "fail")
+            | "::" + (if .failsRun then "error" else "warning" end)
+              + " title=seo-checkup::" + (($p.url + " — " + .rule + ": " + .message) | esc)
+          ' "$report" || echo "::warning::seo-checkup: could not build annotations from $report"
         fi
 
         case $code in
