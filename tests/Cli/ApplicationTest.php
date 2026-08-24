@@ -290,4 +290,11 @@ final class ApplicationTest extends TestCase
         self::assertStringContainsString('only one format can go to stdout', $err);
         self::assertSame([], $http->requested, 'nothing was fetched');
     }
+
+    public function testVersionMatchesTheChangelog(): void
+    {
+        $changelog = (string) file_get_contents(__DIR__ . '/../../CHANGELOG.md');
+        self::assertSame(1, preg_match('/^## \[(\d+\.\d+\.\d+)\]/m', $changelog, $m), 'no released version in CHANGELOG.md');
+        self::assertSame($m[1] ?? '', Application::VERSION, 'Application::VERSION must match the newest CHANGELOG entry');
+    }
 }

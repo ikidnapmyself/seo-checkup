@@ -12,7 +12,7 @@ use SEOCheckup\Exception\SeoCheckupException;
  */
 final class Application
 {
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.2.0';
 
     public const EXIT_OK     = 0;
     public const EXIT_FAILED = 1;
@@ -130,6 +130,9 @@ final class Application
           --fail-on=broken-links,…   Rules or presets (all, recommended, none) that fail the run
           --format=text|md|json      Output format; default: text
           --output=FILE              Write the report to FILE instead of stdout
+          --text=FILE                Also write the text report to FILE ("-" = stdout)
+          --md=FILE                  Also write the Markdown report to FILE ("-" = stdout)
+          --json=FILE                Also write the JSON report to FILE ("-" = stdout)
           --config=FILE              Config file; default: ./seo-checkup.json if present
           --timeout=N                Seconds per request; default: 15
           --help                     Show this help
