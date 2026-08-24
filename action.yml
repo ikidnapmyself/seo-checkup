@@ -154,11 +154,15 @@ runs:
         fi
 
         # One annotation per failed rule: error when it failed the run, warning otherwise.
+        # Workflow-command messages must escape %, CR and LF. (Note: the text, md and
+        # annotation passes are independent runs of the CLI.)
         if [ "$code" -le 1 ] && [ -f "$report" ]; then
-          jq -r '.pages[] as $p | $p.verdicts[] | select(.result == "fail")
-                 | (if .failsRun then "error" else "warning" end)
-                 + " title=seo-checkup::" + $p.url + " — " + .rule + ": " + .message' "$report" \
-            | sed 's/^/::/'
+          jq -r '
+            def esc: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+            .pages[] as $p | $p.verdicts[] | select(.result == "fail")
+            | "::" + (if .failsRun then "error" else "warning" end)
+              + " title=seo-checkup::" + (($p.url + " — " + .rule + ": " + .message) | esc)
+          ' "$report" || echo "::warning::seo-checkup: could not build annotations from $report"
         fi
 
         case $code in
