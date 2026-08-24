@@ -21,6 +21,7 @@ final class ArgvParserTest extends TestCase
         self::assertNull($o->timeout);
         self::assertFalse($o->help);
         self::assertFalse($o->version);
+        self::assertSame([], $o->sinks);
     }
 
     public function testListOptionsAreSplitAndTrimmed(): void
@@ -76,5 +77,32 @@ final class ArgvParserTest extends TestCase
         $this->expectException(UsageException::class);
         $this->expectExceptionMessage('--timeout must be a positive integer');
         ArgvParser::parse(['https://example.com', '--timeout=abc']);
+    }
+
+    public function testSinkFlagsAreCollected(): void
+    {
+        $o = ArgvParser::parse(['https://example.com', '--json=report.json', '--md=summary.md']);
+        self::assertSame(['json' => 'report.json', 'md' => 'summary.md'], $o->sinks);
+        self::assertNull($o->format, 'sink flags do not touch the primary');
+        self::assertNull($o->output);
+    }
+
+    public function testSinkFlagAcceptsDashForStdout(): void
+    {
+        $o = ArgvParser::parse(['https://example.com', '--md=-']);
+        self::assertSame(['md' => '-'], $o->sinks);
+    }
+
+    public function testSinkFlagNeedsAValue(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--json needs a value');
+        ArgvParser::parse(['https://example.com', '--json']);
+    }
+
+    public function testLastSinkFlagWinsForTheSameFormat(): void
+    {
+        $o = ArgvParser::parse(['https://example.com', '--json=a.json', '--json=b.json']);
+        self::assertSame(['json' => 'b.json'], $o->sinks);
     }
 }

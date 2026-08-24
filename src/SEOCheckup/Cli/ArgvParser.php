@@ -6,6 +6,7 @@ final class ArgvParser
 {
     private const LIST_OPTIONS   = ['paths', 'checks', 'fail-on'];
     private const STRING_OPTIONS = ['format', 'output', 'config'];
+    private const SINK_OPTIONS   = ['text', 'md', 'json'];
 
     /**
      * @param list<string> $args argv without argv[0]
@@ -29,7 +30,7 @@ final class ArgvParser
             if (str_starts_with($arg, '--')) {
                 $eq = strpos($arg, '=');
                 $name = substr($arg, 2, $eq === false ? null : $eq - 2);
-                if (!in_array($name, [...self::LIST_OPTIONS, ...self::STRING_OPTIONS, 'timeout'], true)) {
+                if (!in_array($name, [...self::LIST_OPTIONS, ...self::STRING_OPTIONS, ...self::SINK_OPTIONS, 'timeout'], true)) {
                     throw new UsageException("Unknown option: --{$name}");
                 }
                 if ($eq === false) {
@@ -49,6 +50,14 @@ final class ArgvParser
             throw new UsageException('--format must be one of ' . implode(', ', Options::FORMATS));
         }
 
+        // Kept in the order they were given; Config puts them in canonical order.
+        $sinks = [];
+        foreach ($values as $name => $value) {
+            if (in_array($name, self::SINK_OPTIONS, true)) {
+                $sinks[$name] = $value;
+            }
+        }
+
         $timeout = null;
         if (isset($values['timeout'])) {
             if (!ctype_digit($values['timeout']) || (int) $values['timeout'] < 1) {
@@ -66,6 +75,7 @@ final class ArgvParser
             output: $values['output'] ?? null,
             config: $values['config'] ?? null,
             timeout: $timeout,
+            sinks: $sinks,
             help: $help,
             version: $version,
         );
