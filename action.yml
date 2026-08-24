@@ -151,6 +151,14 @@ runs:
           [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
         fi
 
+        # One annotation per failed rule: error when it failed the run, warning otherwise.
+        if [ "$code" -le 1 ] && [ -f "$report" ]; then
+          jq -r '.pages[] as $p | $p.verdicts[] | select(.result == "fail")
+                 | (if .failsRun then "error" else "warning" end)
+                 + " title=seo-checkup::" + $p.url + " — " + .rule + ": " + .message' "$report" \
+            | sed 's/^/::/'
+        fi
+
         case $code in
           0) echo "failed=false" >> "$GITHUB_OUTPUT" ;;
           1) echo "failed=true"  >> "$GITHUB_OUTPUT"
