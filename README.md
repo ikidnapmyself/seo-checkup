@@ -142,6 +142,12 @@ The checks report data; the rules judge it. Every run evaluates all 13 rules and
 
 `--output=FILE` writes the report to a file instead of stdout.
 
+`--text=FILE`, `--md=FILE` and `--json=FILE` write additional reports from the same run — one fetch, several formats. `-` sends one to stdout instead of a file. `--format`/`--output` still choose the primary report (text on stdout by default), and two formats aiming at stdout is an error.
+
+```bash
+seo-checkup https://example.com --json=report.json --md=summary.md
+```
+
 ### Config file
 
 The CLI reads `seo-checkup.json` from the current directory when it exists, or the file named by `--config`. Precedence is flags > file > defaults. Recognised keys: `url`, `paths`, `checks`, `fail-on`, `format`, `timeout`, `overrides`.
@@ -271,7 +277,7 @@ If your deploy already produces a preview URL, check that instead of serving loc
 - It installs PHP via setup-php (the `php-version` input) and the package via Composer: running the action at a release tag `vX.Y.Z` installs that package version, `vX` the latest release in that major, and a branch or SHA reference runs the action's own checkout. Use `@v1` for the latest 1.x, or pin `@v1.1.0`.
 - `artifact-name` must be unique per workflow run if the action runs more than once (matrix builds, several sites).
 - Runs against a local host (the `serve` mode's default) skip the `network` check group by default, like the CLI.
-- The step log and the job summary are produced by extra CLI runs, so each page is fetched three times — a known limitation, see DEFERRED.md.
+- Each page is fetched once; the step log, the job summary and the artifact are all rendered from that single run.
 - `$GITHUB_STEP_SUMMARY` caps at 1 MiB; on big multi-page runs, narrow `--checks` (the raw check data dominates the summary's size).
 
 ## Checks
