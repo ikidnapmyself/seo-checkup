@@ -71,15 +71,21 @@ final class Application
                 $failed  = $failed || $result->failed;
             }
 
-            $tty    = $config->output === null && stream_isatty($stdout);
-            $report = self::renderer($config->format, $tty)->render($pages, $failed);
+            /** @var array<string, string> $rendered format+tty => report */
+            $rendered = [];
 
-            if ($config->output !== null) {
-                if (@file_put_contents($config->output, $report) === false) {
-                    throw new UsageException("Could not write {$config->output}");
+            foreach ($config->sinks as $sink) {
+                // Colour only a text report going to a terminal; a file always gets plain text.
+                $tty = $sink->isStdout() && stream_isatty($stdout);
+                $key = $sink->format . ($tty ? ':tty' : '');
+
+                $rendered[$key] ??= self::renderer($sink->format, $tty)->render($pages, $failed);
+
+                if ($sink->isStdout()) {
+                    fwrite($stdout, $rendered[$key]);
+                } elseif (@file_put_contents($sink->target, $rendered[$key]) === false) {
+                    throw new UsageException("Could not write {$sink->target}");
                 }
-            } else {
-                fwrite($stdout, $report);
             }
 
             return $failed ? self::EXIT_FAILED : self::EXIT_OK;

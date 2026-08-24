@@ -19,6 +19,7 @@ final class Config
      * @param list<string>      $paths   [] = just $url
      * @param list<string>|null $checks  null = Checks::resolve() default
      * @param list<string>      $failOn  expanded rule names
+     * @param list<Sink>        $sinks   in write order; the primary is first
      * @param array<string, array{checks?: list<string>|null, fail-on?: list<string>}> $overrides path glob => settings (fail-on already expanded)
      */
     private function __construct(
@@ -27,7 +28,7 @@ final class Config
         public readonly ?array $checks,
         public readonly array $failOn,
         public readonly string $format,
-        public readonly ?string $output,
+        public readonly array $sinks,
         public readonly int $timeout,
         private readonly array $overrides,
     ) {
@@ -56,10 +57,36 @@ final class Config
             checks: self::validateChecks($o->checks ?? self::list($data, 'checks')),
             failOn: RuleCatalogue::expand($o->failOn ?? self::list($data, 'fail-on')),
             format: $format,
-            output: $o->output,
+            sinks: self::sinks($format, $o),
             timeout: $timeout,
             overrides: self::overrides($data),
         );
+    }
+
+    /**
+     * The primary (--format/--output, default text on stdout) followed by the
+     * per-format sinks in a fixed order, so output is deterministic.
+     *
+     * @return list<Sink>
+     */
+    private static function sinks(string $format, Options $o): array
+    {
+        $sinks = [new Sink($format, $o->output ?? Sink::STDOUT)];
+
+        foreach (Options::FORMATS as $f) {
+            if (isset($o->sinks[$f])) {
+                $sinks[] = new Sink($f, $o->sinks[$f]);
+            }
+        }
+
+        $onStdout = array_values(array_filter($sinks, fn (Sink $s) => $s->isStdout()));
+        if (count($onStdout) > 1) {
+            $names = implode(' and ', array_map(fn (Sink $s) => $s->format, $onStdout));
+
+            throw new UsageException("only one format can go to stdout ({$names} both target it; give one of them a file)");
+        }
+
+        return $sinks;
     }
 
     /**

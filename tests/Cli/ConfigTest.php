@@ -5,6 +5,7 @@ namespace SEOCheckup\Tests\Cli;
 use PHPUnit\Framework\TestCase;
 use SEOCheckup\Cli\Config;
 use SEOCheckup\Cli\Options;
+use SEOCheckup\Cli\Sink;
 use SEOCheckup\Cli\UsageException;
 
 final class ConfigTest extends TestCase
@@ -51,7 +52,6 @@ final class ConfigTest extends TestCase
         self::assertNull($c->checks);
         self::assertSame([], $c->failOn);
         self::assertSame('text', $c->format);
-        self::assertNull($c->output);
         self::assertSame(15, $c->timeout);
     }
 
@@ -201,5 +201,47 @@ final class ConfigTest extends TestCase
         $this->expectException(UsageException::class);
         $this->expectExceptionMessage('Invalid URL');
         Config::build(new Options(url: 'not a url'), null)->pages();
+    }
+
+    public function testDefaultSinkIsTextToStdout(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com'), null);
+        self::assertCount(1, $c->sinks);
+        self::assertSame('text', $c->sinks[0]->format);
+        self::assertTrue($c->sinks[0]->isStdout());
+    }
+
+    public function testPrimaryComesFirstThenSinksInCanonicalOrder(): void
+    {
+        $c = Config::build(new Options(
+            url: 'https://example.com',
+            sinks: ['json' => 'r.json', 'text' => 't.txt', 'md' => 's.md'],
+        ), null);
+
+        self::assertSame(
+            [['text', '-'], ['text', 't.txt'], ['md', 's.md'], ['json', 'r.json']],
+            array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks),
+        );
+    }
+
+    public function testTwoSinksOnStdoutIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('only one format can go to stdout');
+        Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), null);
+    }
+
+    public function testASinkOnStdoutIsFineWhenThePrimaryIsAFile(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', output: 'r.txt', sinks: ['json' => '-']), null);
+        self::assertSame([['text', 'r.txt'], ['json', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
+    }
+
+    public function testCollisionAgainstAFormatFromTheConfigFile(): void
+    {
+        // format=json in the file means the primary is json on stdout.
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('only one format can go to stdout');
+        Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), $this->tempJson('{"format": "json"}'));
     }
 }

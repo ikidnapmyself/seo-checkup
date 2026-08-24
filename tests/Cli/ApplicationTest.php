@@ -226,4 +226,68 @@ final class ApplicationTest extends TestCase
         self::assertSame(0, $code);
         self::assertSame(3, $seen);
     }
+
+    public function testOneFetchFeedsEveryOutput(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head><title>T</title></head><body></body></html>');
+        $json = $this->dir . '/report.json';
+        $md   = $this->dir . '/summary.md';
+
+        [$code, $out] = $this->runApp(
+            $this->app($http),
+            'https://example.com/',
+            '--checks=metaTitle',
+            "--json={$json}",
+            "--md={$md}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['https://example.com/'], $http->requested, 'the page is fetched exactly once');
+
+        self::assertStringContainsString('PASS  missing-title', $out, 'text still goes to stdout');
+        self::assertFileExists($json);
+        self::assertFileExists($md);
+
+        $report = json_decode((string) file_get_contents($json), true);
+        self::assertIsArray($report);
+        self::assertFalse($report['failed']);
+        self::assertStringContainsString('| Rule | Result |', (string) file_get_contents($md));
+    }
+
+    public function testTextSinkToAFileIsNotColoured(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/report.txt';
+
+        [$code] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', "--text={$file}");
+
+        self::assertSame(0, $code);
+        self::assertStringNotContainsString("\e[", (string) file_get_contents($file));
+    }
+
+    public function testUnwritableSinkPathExitsTwo(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+
+        [$code, , $err] = $this->runApp(
+            $this->app($http),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--json=' . $this->dir . '/missing-dir/report.json',
+        );
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString('Could not write', $err);
+    }
+
+    public function testTwoFormatsOnStdoutExitsTwoBeforeFetching(): void
+    {
+        $http = new FakeHttpClient();
+
+        [$code, , $err] = $this->runApp($this->app($http), 'https://example.com/', '--json=-');
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString('only one format can go to stdout', $err);
+        self::assertSame([], $http->requested, 'nothing was fetched');
+    }
 }
