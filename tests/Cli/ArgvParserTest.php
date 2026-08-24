@@ -119,6 +119,13 @@ final class ArgvParserTest extends TestCase
         ArgvParser::parse(['https://example.com', '--output=']);
     }
 
+    public function testEmptyFormatValueThrows(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--format needs a value');
+        ArgvParser::parse(['https://example.com', '--format=']);
+    }
+
     public function testEmptyConfigValueThrows(): void
     {
         $this->expectException(UsageException::class);

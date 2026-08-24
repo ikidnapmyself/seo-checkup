@@ -39,7 +39,7 @@ final class ArgvParser
                     throw new UsageException("--{$name} needs a value: --{$name}=…");
                 }
                 $value = substr($arg, $eq + 1);
-                if ($value === '' && in_array($name, [...self::SINK_OPTIONS, 'output', 'config'], true)) {
+                if ($value === '' && in_array($name, [...self::SINK_OPTIONS, 'output', 'config', 'format'], true)) {
                     throw new UsageException("--{$name} needs a value: --{$name}=\u{2026}");
                 }
                 if (in_array($name, self::SINK_OPTIONS, true)) {
