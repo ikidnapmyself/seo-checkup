@@ -19,6 +19,7 @@ final class Config
      * @param list<string>      $paths   [] = just $url
      * @param list<string>|null $checks  null = Checks::resolve() default
      * @param list<string>      $failOn  expanded rule names
+     * @param list<Sink>        $sinks   in write order; the primary is first
      * @param array<string, array{checks?: list<string>|null, fail-on?: list<string>}> $overrides path glob => settings (fail-on already expanded)
      */
     private function __construct(
@@ -26,8 +27,7 @@ final class Config
         public readonly array $paths,
         public readonly ?array $checks,
         public readonly array $failOn,
-        public readonly string $format,
-        public readonly ?string $output,
+        public readonly array $sinks,
         public readonly int $timeout,
         private readonly array $overrides,
     ) {
@@ -55,11 +55,97 @@ final class Config
             paths: $o->paths ?? self::list($data, 'paths') ?? [],
             checks: self::validateChecks($o->checks ?? self::list($data, 'checks')),
             failOn: RuleCatalogue::expand($o->failOn ?? self::list($data, 'fail-on')),
-            format: $format,
-            output: $o->output,
+            sinks: self::sinks($format, $o),
             timeout: $timeout,
             overrides: self::overrides($data),
         );
+    }
+
+    /**
+     * The primary (--format/--output, default text on stdout) followed by the
+     * per-format sinks in a fixed order, so output is deterministic.
+     *
+     * An identical (format, target) pair asked for twice is the same bytes in
+     * the same place, so it collapses to one sink; two *different* formats on
+     * one target would clobber each other and is a usage error.
+     *
+     * @return list<Sink>
+     * @throws UsageException on an unknown sink format or a clobbering target
+     */
+    private static function sinks(string $format, Options $o): array
+    {
+        foreach (array_keys($o->sinks) as $f) {
+            if (!in_array($f, Options::FORMATS, true)) {
+                throw new UsageException("Unknown output format: {$f} (expected one of " . implode(', ', Options::FORMATS) . ')');
+            }
+        }
+
+        $sinks = [new Sink($format, $o->output ?? Sink::STDOUT, $o->output !== null ? '--output' : '--format')];
+
+        foreach (Options::FORMATS as $f) {
+            if (isset($o->sinks[$f])) {
+                $sinks[] = new Sink($f, $o->sinks[$f], "--{$f}");
+            }
+        }
+
+        /** @var array<string, list<Sink>> $byTarget */
+        $byTarget = [];
+        $kept     = [];
+        foreach ($sinks as $sink) {
+            $same = array_filter($byTarget[$sink->target] ?? [], fn (Sink $s) => $s->format === $sink->format);
+            if ($same !== []) {
+                continue; // the same report to the same place, asked for twice
+            }
+            $byTarget[$sink->target][] = $sink;
+            $kept[] = $sink;
+        }
+
+        foreach ($byTarget as $target => $group) {
+            if (count($group) > 1) {
+                throw new UsageException(self::collisionMessage((string) $target, $group));
+            }
+        }
+
+        self::preflight($kept);
+
+        return $kept;
+    }
+
+    /**
+     * @param non-empty-list<Sink> $group two or more sinks aimed at one target
+     */
+    private static function collisionMessage(string $target, array $group): string
+    {
+        $flags = array_map(fn (Sink $s) => $s->origin, $group);
+        $last  = array_pop($flags);
+        $names = implode(', ', $flags) . ' and ' . $last;
+        $where = $group[0]->isStdout() ? 'stdout' : $target;
+        $fix   = $group[0]->isStdout() ? 'a file' : 'a different file';
+
+        return count($group) === 2
+            ? "{$names} both target {$where}; give one of them {$fix}"
+            : "{$names} all target {$where}; give each of them its own file";
+    }
+
+    /**
+     * Best effort: a target whose directory does not exist can never be
+     * written, so say so now rather than after crawling every page and
+     * throwing the reports away.
+     *
+     * @param list<Sink> $sinks
+     * @throws UsageException on a target in a directory that does not exist
+     */
+    private static function preflight(array $sinks): void
+    {
+        foreach ($sinks as $sink) {
+            if ($sink->isStdout()) {
+                continue;
+            }
+            $dir = \dirname($sink->target);
+            if (!is_dir($dir)) {
+                throw new UsageException("Could not write {$sink->target}: {$dir} is not a directory");
+            }
+        }
     }
 
     /**

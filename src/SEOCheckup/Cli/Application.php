@@ -12,7 +12,7 @@ use SEOCheckup\Exception\SeoCheckupException;
  */
 final class Application
 {
-    public const VERSION = '1.1.0';
+    public const VERSION = '1.2.0';
 
     public const EXIT_OK     = 0;
     public const EXIT_FAILED = 1;
@@ -23,13 +23,26 @@ final class Application
     /** @var \Closure(string, int): Analyze */
     private readonly \Closure $factory;
 
+    /** @var \Closure(resource): bool */
+    private readonly \Closure $isTty;
+
+    /** @var \Closure(string, bool): Report\Renderer */
+    private readonly \Closure $renderers;
+
     /**
      * @param (callable(string, int): Analyze)|null $factory (url, timeout seconds) → Analyze.
      *        null builds a Guzzle client honouring --timeout; tests inject a fake.
+     * @param (callable(resource): bool)|null $isTty is this stream a terminal?
+     *        null uses stream_isatty(); tests inject a fixed answer, since a
+     *        php://memory stdout is never a tty.
+     * @param (callable(string, bool): Report\Renderer)|null $renderers (format, colour) → Renderer.
+     *        null uses self::renderer(); tests inject a factory that counts renders.
      */
-    public function __construct(?callable $factory = null)
+    public function __construct(?callable $factory = null, ?callable $isTty = null, ?callable $renderers = null)
     {
-        $this->factory = $factory !== null ? $factory(...) : self::defaultFactory(...);
+        $this->factory   = $factory !== null ? $factory(...) : self::defaultFactory(...);
+        $this->isTty     = $isTty !== null ? $isTty(...) : stream_isatty(...);
+        $this->renderers = $renderers !== null ? $renderers(...) : self::renderer(...);
     }
 
     /**
@@ -71,19 +84,27 @@ final class Application
                 $failed  = $failed || $result->failed;
             }
 
-            $tty    = $config->output === null && stream_isatty($stdout);
-            $report = self::renderer($config->format, $tty)->render($pages, $failed);
+            /** @var array<string, string> $rendered format+tty => report */
+            $rendered = [];
 
-            if ($config->output !== null) {
-                if (@file_put_contents($config->output, $report) === false) {
-                    throw new UsageException("Could not write {$config->output}");
+            foreach ($config->sinks as $sink) {
+                // Colour only a text report going to a terminal; a file always gets plain text.
+                $tty = $sink->format === 'text' && $sink->isStdout() && ($this->isTty)($stdout);
+                $key = $sink->format . ($tty ? ':tty' : '');
+
+                $rendered[$key] ??= ($this->renderers)($sink->format, $tty)->render($pages, $failed);
+
+                if ($sink->isStdout()) {
+                    fwrite($stdout, $rendered[$key]);
+                } elseif (@file_put_contents($sink->target, $rendered[$key]) === false) {
+                    $reason = error_get_last()['message'] ?? '';
+
+                    throw new OutputException("Could not write {$sink->target}: {$reason}");
                 }
-            } else {
-                fwrite($stdout, $report);
             }
 
             return $failed ? self::EXIT_FAILED : self::EXIT_OK;
-        } catch (FetchException $e) {
+        } catch (FetchException | OutputException $e) {
             fwrite($stderr, "seo-checkup: {$e->getMessage()}\n");
 
             return self::EXIT_USAGE;
@@ -95,7 +116,8 @@ final class Application
         }
     }
 
-    private static function renderer(string $format, bool $tty): Report\Renderer
+    /** Public so a test can wrap it in a counting factory. */
+    public static function renderer(string $format, bool $tty): Report\Renderer
     {
         return match ($format) {
             'json'  => new Report\JsonRenderer(),
@@ -123,7 +145,10 @@ final class Application
                                      skipped for localhost / *.local / *.test hosts)
           --fail-on=broken-links,…   Rules or presets (all, recommended, none) that fail the run
           --format=text|md|json      Output format; default: text
-          --output=FILE              Write the report to FILE instead of stdout
+          --output=FILE              Write the report to FILE instead of stdout ("-" = stdout)
+          --text=FILE                Also write the text report to FILE ("-" = stdout)
+          --md=FILE                  Also write the Markdown report to FILE ("-" = stdout)
+          --json=FILE                Also write the JSON report to FILE ("-" = stdout)
           --config=FILE              Config file; default: ./seo-checkup.json if present
           --timeout=N                Seconds per request; default: 15
           --help                     Show this help

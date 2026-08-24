@@ -5,6 +5,7 @@ namespace SEOCheckup\Tests\Cli;
 use PHPUnit\Framework\TestCase;
 use SEOCheckup\Cli\Config;
 use SEOCheckup\Cli\Options;
+use SEOCheckup\Cli\Sink;
 use SEOCheckup\Cli\UsageException;
 
 final class ConfigTest extends TestCase
@@ -50,8 +51,7 @@ final class ConfigTest extends TestCase
         self::assertSame([], $c->paths);
         self::assertNull($c->checks);
         self::assertSame([], $c->failOn);
-        self::assertSame('text', $c->format);
-        self::assertNull($c->output);
+        self::assertSame('text', $c->sinks[0]->format);
         self::assertSame(15, $c->timeout);
     }
 
@@ -63,7 +63,7 @@ final class ConfigTest extends TestCase
         self::assertSame(['/', '/blog/post'], $c->paths);
         self::assertSame(['meta'], $c->checks);
         self::assertSame(['broken-links', 'missing-title', 'missing-description', 'missing-canonical', 'not-https'], $c->failOn);
-        self::assertSame('json', $c->format);
+        self::assertSame('json', $c->sinks[0]->format);
         self::assertSame(30, $c->timeout);
     }
 
@@ -74,7 +74,7 @@ final class ConfigTest extends TestCase
         self::assertSame(['/a'], $c->paths);
         self::assertSame(['links'], $c->checks);
         self::assertSame([], $c->failOn);
-        self::assertSame('md', $c->format);
+        self::assertSame('md', $c->sinks[0]->format);
         self::assertSame(5, $c->timeout);
     }
 
@@ -201,5 +201,98 @@ final class ConfigTest extends TestCase
         $this->expectException(UsageException::class);
         $this->expectExceptionMessage('Invalid URL');
         Config::build(new Options(url: 'not a url'), null)->pages();
+    }
+
+    public function testDefaultSinkIsTextToStdout(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com'), null);
+        self::assertCount(1, $c->sinks);
+        self::assertSame('text', $c->sinks[0]->format);
+        self::assertTrue($c->sinks[0]->isStdout());
+    }
+
+    public function testPrimaryComesFirstThenSinksInCanonicalOrder(): void
+    {
+        $c = Config::build(new Options(
+            url: 'https://example.com',
+            sinks: ['json' => 'r.json', 'text' => 't.txt', 'md' => 's.md'],
+        ), null);
+
+        self::assertSame(
+            [['text', '-'], ['text', 't.txt'], ['md', 's.md'], ['json', 'r.json']],
+            array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks),
+        );
+    }
+
+    public function testATargetInAMissingDirectoryIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('is not a directory');
+        Config::build(new Options(url: 'https://example.com', sinks: ['json' => $this->tempCwd . '/nope/r.json']), null);
+    }
+
+    public function testUnknownSinkFormatIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('Unknown output format: jsonn');
+        Config::build(new Options(url: 'https://example.com', sinks: ['jsonn' => 'x.json']), null);
+    }
+
+    public function testTwoSinksOnStdoutIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--format and --json both target stdout; give one of them a file');
+        Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), null);
+    }
+
+    public function testTheErrorNamesTheFlagsTheUserTyped(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--output and --json both target stdout; give one of them a file');
+        Config::build(new Options(url: 'https://example.com', output: '-', sinks: ['json' => '-']), null);
+    }
+
+    public function testThreeCollidingSinksReadGrammatically(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--format, --md and --json all target stdout; give each of them its own file');
+        Config::build(new Options(url: 'https://example.com', sinks: ['md' => '-', 'json' => '-']), null);
+    }
+
+    public function testTwoSinksOnTheSameFileIsAUsageError(): void
+    {
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--output and --json both target both.txt; give one of them a different file');
+        Config::build(new Options(url: 'https://example.com', output: 'both.txt', sinks: ['json' => 'both.txt']), null);
+    }
+
+    public function testIdenticalFormatAndTargetIsDedupedNotAnError(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', sinks: ['text' => '-']), null);
+        self::assertSame([['text', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
+
+        $c = Config::build(new Options(url: 'https://example.com', output: 'r.txt', sinks: ['text' => 'r.txt']), null);
+        self::assertSame([['text', 'r.txt']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
+    }
+
+    public function testASinkOnStdoutIsFineWhenThePrimaryIsAFile(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', output: 'r.txt', sinks: ['json' => '-']), null);
+        self::assertSame([['text', 'r.txt'], ['json', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
+    }
+
+    public function testCollisionAgainstAFormatFromTheConfigFile(): void
+    {
+        // format=json in the file means the primary is json on stdout.
+        $this->expectException(UsageException::class);
+        $this->expectExceptionMessage('--format and --md both target stdout');
+        Config::build(new Options(url: 'https://example.com', sinks: ['md' => '-']), $this->tempJson('{"format": "json"}'));
+    }
+
+    public function testTheSameFormatFromTheFileAndASinkFlagIsDeduped(): void
+    {
+        $c = Config::build(new Options(url: 'https://example.com', sinks: ['json' => '-']), $this->tempJson('{"format": "json"}'));
+
+        self::assertSame([['json', '-']], array_map(fn (Sink $s) => [$s->format, $s->target], $c->sinks));
     }
 }

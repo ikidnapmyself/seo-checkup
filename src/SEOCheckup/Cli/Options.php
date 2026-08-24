@@ -13,6 +13,7 @@ final class Options
      * @param list<string>|null $paths
      * @param list<string>|null $checks
      * @param list<string>|null $failOn
+     * @param array<string, string> $sinks format => target ("-" = stdout)
      */
     public function __construct(
         public readonly ?string $url = null,
@@ -23,6 +24,7 @@ final class Options
         public readonly ?string $output = null,
         public readonly ?string $config = null,
         public readonly ?int $timeout = null,
+        public readonly array $sinks = [],
         public readonly bool $help = false,
         public readonly bool $version = false,
     ) {

@@ -8,6 +8,7 @@ use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use SEOCheckup\Analyze;
 use SEOCheckup\Cli\Application;
+use SEOCheckup\Cli\Report\Renderer;
 use SEOCheckup\Tests\Support\FakeDnsLookup;
 use SEOCheckup\Tests\Support\FakeHttpClient;
 
@@ -35,11 +36,29 @@ final class ApplicationTest extends TestCase
         rmdir($this->dir);
     }
 
-    private function app(?FakeHttpClient $http = null): Application
+    private function app(?FakeHttpClient $http = null, ?callable $isTty = null, ?callable $renderers = null): Application
     {
         $http ??= new FakeHttpClient();
 
-        return new Application(fn (string $url, int $timeout) => new Analyze($url, $http, new FakeDnsLookup()));
+        return new Application(
+            fn (string $url, int $timeout) => new Analyze($url, $http, new FakeDnsLookup()),
+            $isTty,
+            $renderers,
+        );
+    }
+
+    /**
+     * A renderer factory that records every render it is asked for.
+     *
+     * @param list<string> $renders
+     */
+    private function countingRenderers(array &$renders): callable
+    {
+        return function (string $format, bool $tty) use (&$renders): Renderer {
+            $renders[] = $format . ($tty ? ':tty' : '');
+
+            return Application::renderer($format, $tty);
+        };
     }
 
     /** @return array{int, string, string} exit code, stdout, stderr */
@@ -156,7 +175,7 @@ final class ApplicationTest extends TestCase
         self::assertStringContainsString('"pages"', (string) file_get_contents($file));
     }
 
-    public function testUnwritableOutputIsAUsageErrorExitTwo(): void
+    public function testOutputInAMissingDirectoryFailsBeforeFetching(): void
     {
         $http = (new FakeHttpClient())->route('https://example.com/', '<html></html>');
         [$code, $out, $err] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--output=' . $this->dir . '/missing-dir/report.txt');
@@ -164,6 +183,21 @@ final class ApplicationTest extends TestCase
         self::assertSame(2, $code);
         self::assertSame('', $out);
         self::assertStringContainsString('Could not write', $err);
+        self::assertStringContainsString('is not a directory', $err);
+        self::assertSame([], $http->requested, 'the crawl is not wasted');
+    }
+
+    public function testAWriteFailureIsNotReportedAsAUsageProblem(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html></html>');
+        // The directory itself: dirname() exists, so only the write can fail.
+        [$code, $out, $err] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--output=' . $this->dir);
+
+        self::assertSame(2, $code);
+        self::assertSame('', $out);
+        self::assertStringContainsString("Could not write {$this->dir}: ", $err);
+        self::assertStringContainsString('Is a directory', $err);
+        self::assertStringNotContainsString("Run 'seo-checkup --help'", $err, 'a disk error is not a usage problem');
     }
 
     public function testConfigFileIsAutoDiscoveredAndFlagsWin(): void
@@ -225,5 +259,146 @@ final class ApplicationTest extends TestCase
         [$code] = $this->runApp($app, 'https://example.com/', '--checks=metaTitle', '--timeout=3');
         self::assertSame(0, $code);
         self::assertSame(3, $seen);
+    }
+
+    public function testOneFetchFeedsEveryOutput(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head><title>T</title></head><body></body></html>');
+        $json = $this->dir . '/report.json';
+        $md   = $this->dir . '/summary.md';
+
+        [$code, $out] = $this->runApp(
+            $this->app($http),
+            'https://example.com/',
+            '--checks=metaTitle',
+            "--json={$json}",
+            "--md={$md}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['https://example.com/'], $http->requested, 'the page is fetched exactly once');
+
+        self::assertMatchesRegularExpression('/PASS\s+missing-title/', $out, 'text still goes to stdout');
+        self::assertFileExists($json);
+        self::assertFileExists($md);
+
+        $report = json_decode((string) file_get_contents($json), true);
+        self::assertIsArray($report);
+        self::assertFalse($report['failed']);
+        self::assertStringContainsString('| Rule | Result |', (string) file_get_contents($md));
+    }
+
+    public function testOnATtyStdoutIsColouredAndTheFileSinkIsNot(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/report.txt';
+        $app  = $this->app($http, fn ($stream): bool => true);
+
+        [$code, $out] = $this->runApp($app, 'https://example.com/', '--checks=metaTitle', "--text={$file}");
+
+        self::assertSame(0, $code);
+        self::assertStringContainsString("\e[", $out, 'the text report on a terminal is coloured');
+        self::assertStringNotContainsString("\e[", (string) file_get_contents($file), 'a file always gets plain text');
+    }
+
+    public function testEachDistinctFormatIsRenderedOnce(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $a = $this->dir . '/a.json';
+        $b = $this->dir . '/b.json';
+        $renders = [];
+
+        [$code] = $this->runApp(
+            $this->app($http, null, $this->countingRenderers($renders)),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--format=json',
+            "--output={$a}",
+            "--json={$b}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['json'], $renders, 'two json sinks share one render');
+        self::assertSame((string) file_get_contents($a), (string) file_get_contents($b));
+    }
+
+    public function testATtyDoesNotMakeANonTextFormatRenderTwice(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/b.json';
+        $renders = [];
+
+        [$code] = $this->runApp(
+            $this->app($http, fn ($stream): bool => true, $this->countingRenderers($renders)),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--format=json',
+            "--json={$file}",
+        );
+
+        self::assertSame(0, $code);
+        self::assertSame(['json'], $renders, 'only a text report cares about the terminal');
+    }
+
+    public function testSinkPathInAMissingDirectoryFailsBeforeFetching(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+
+        [$code, , $err] = $this->runApp(
+            $this->app($http),
+            'https://example.com/',
+            '--checks=metaTitle',
+            '--json=' . $this->dir . '/missing-dir/report.json',
+        );
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString('Could not write', $err);
+        self::assertSame([], $http->requested, 'the crawl is not wasted');
+    }
+
+    public function testTwoFormatsOnStdoutExitsTwoBeforeFetching(): void
+    {
+        $http = new FakeHttpClient();
+
+        [$code, , $err] = $this->runApp($this->app($http), 'https://example.com/', '--json=-');
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString('--format and --json both target stdout', $err);
+        self::assertSame([], $http->requested, 'nothing was fetched');
+    }
+
+    public function testTwoSinksOnTheSameFileExitsTwoBeforeFetching(): void
+    {
+        $http = new FakeHttpClient();
+        $file = $this->dir . '/both.txt';
+
+        [$code, , $err] = $this->runApp($this->app($http), 'https://example.com/', "--output={$file}", "--json={$file}");
+
+        self::assertSame(2, $code);
+        self::assertStringContainsString("--output and --json both target {$file}", $err);
+        self::assertFileDoesNotExist($file);
+        self::assertSame([], $http->requested, 'nothing was fetched');
+    }
+
+    public function testTheSameFormatToTheSameFileTwiceIsFine(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+        $file = $this->dir . '/report.txt';
+
+        [$code] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', "--output={$file}", "--text={$file}");
+
+        self::assertSame(0, $code);
+        self::assertStringContainsString('missing-title', (string) file_get_contents($file));
+    }
+
+    public function testOutputDashMeansStdout(): void
+    {
+        $http = (new FakeHttpClient())->route('https://example.com/', '<html><head></head><body></body></html>');
+
+        [$code, $out] = $this->runApp($this->app($http), 'https://example.com/', '--checks=metaTitle', '--format=json', '--output=-');
+
+        self::assertSame(0, $code);
+        self::assertStringStartsWith('{', $out);
+        self::assertFileDoesNotExist($this->dir . '/-', 'no file called "-"');
     }
 }

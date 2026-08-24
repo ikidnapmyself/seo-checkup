@@ -130,7 +130,8 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         CONFIG: ${{ inputs.config }}
       run: |
-        args=("$URL")
+        # --format=text pins the step log even when a repo's seo-checkup.json sets another format.
+        args=("$URL" --format=text)
         [ -n "$PATHS" ]   && args+=("--paths=$PATHS")
         [ -n "$CHECKS" ]  && args+=("--checks=$CHECKS")
         [ -n "$FAIL_ON" ] && args+=("--fail-on=$FAIL_ON")
@@ -140,22 +141,17 @@ runs:
         summary="$RUNNER_TEMP/seo-checkup-summary.md"
 
         set +e
-        seo-checkup "${args[@]}" --format=json --output="$report"
+        seo-checkup "${args[@]}" --json="$report" --md="$summary"
         code=$?
         set -e
         [ -f "$report" ] && echo "report=$report" >> "$GITHUB_OUTPUT"
 
-        if [ "$code" -le 1 ]; then
-          # Extra passes for the humans (the CLI writes one format per run):
-          # text to the step log, Markdown to the job summary.
-          seo-checkup "${args[@]}" --format=text || true
-          seo-checkup "${args[@]}" --format=md --output="$summary" || true
-          [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
-        fi
+        # One run, three renderings: text above, JSON for the artifact and the
+        # annotations below, Markdown for the job summary.
+        [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY"
 
         # One annotation per failed rule: error when it failed the run, warning otherwise.
-        # Workflow-command messages must escape %, CR and LF. (Note: the text, md and
-        # annotation passes are independent runs of the CLI.)
+        # Workflow-command messages must escape %, CR and LF.
         if [ "$code" -le 1 ] && [ -f "$report" ]; then
           jq -r '
             def esc: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");

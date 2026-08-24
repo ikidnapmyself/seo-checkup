@@ -6,6 +6,7 @@ final class ArgvParser
 {
     private const LIST_OPTIONS   = ['paths', 'checks', 'fail-on'];
     private const STRING_OPTIONS = ['format', 'output', 'config'];
+    private const SINK_OPTIONS   = ['text', 'md', 'json'];
 
     /**
      * @param list<string> $args argv without argv[0]
@@ -15,6 +16,8 @@ final class ArgvParser
         $url = null;
         /** @var array<string, string> $values */
         $values = [];
+        /** @var array<string, string> $sinks */
+        $sinks = [];
         $help = $version = false;
 
         foreach ($args as $arg) {
@@ -29,13 +32,20 @@ final class ArgvParser
             if (str_starts_with($arg, '--')) {
                 $eq = strpos($arg, '=');
                 $name = substr($arg, 2, $eq === false ? null : $eq - 2);
-                if (!in_array($name, [...self::LIST_OPTIONS, ...self::STRING_OPTIONS, 'timeout'], true)) {
+                if (!in_array($name, [...self::LIST_OPTIONS, ...self::STRING_OPTIONS, ...self::SINK_OPTIONS, 'timeout'], true)) {
                     throw new UsageException("Unknown option: --{$name}");
                 }
                 if ($eq === false) {
                     throw new UsageException("--{$name} needs a value: --{$name}=…");
                 }
-                $values[$name] = substr($arg, $eq + 1);
+                $value = substr($arg, $eq + 1);
+                if ($value === '' && in_array($name, [...self::SINK_OPTIONS, 'output', 'config', 'format'], true)) {
+                    throw new UsageException("--{$name} needs a value: --{$name}=\u{2026}");
+                }
+                if (in_array($name, self::SINK_OPTIONS, true)) {
+                    $sinks[$name] = $value;
+                }
+                $values[$name] = $value;
                 continue;
             }
             if ($url !== null) {
@@ -66,6 +76,7 @@ final class ArgvParser
             output: $values['output'] ?? null,
             config: $values['config'] ?? null,
             timeout: $timeout,
+            sinks: $sinks,
             help: $help,
             version: $version,
         );

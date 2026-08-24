@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-08-24
+
+### Added
+
+- **`--text`, `--md` and `--json` output sinks.** One run can now write several formats at once — `seo-checkup URL --json=report.json --md=summary.md` fetches every page once and renders both, with the text report still going to stdout. Each flag takes a path or `-` for stdout; `--format`/`--output` keep their meaning as the primary report. Two sinks aiming at the same place — stdout or one file — is a usage error, as is a target whose directory does not exist; both are raised before anything is fetched, so a long crawl is never thrown away. Asking for the same format and target twice is not an error, it just writes once.
+
+### Changed
+
+- **`--output=-` now means stdout** instead of writing a file literally named `-`, matching `--text`/`--md`/`--json`, where `-` has always meant stdout. Scripts relying on the old behaviour should use `--output=./-`.
+- **The GitHub Action runs the CLI once per page instead of three times.** The step log, the job summary and the JSON artifact now come from a single run, so `broken-links` crawls a page's links once, runs against a `serve` dev server are roughly three times faster, and the three outputs can no longer disagree with each other.
+
+### Fixed
+
+- `seo-checkup --version` reported `1.1.0` on the 1.1.1, 1.1.2 and 1.1.3 releases — `Application::VERSION` was never bumped. It now matches the release, and a test pins it to the newest `CHANGELOG.md` entry so it cannot drift again.
+
 ## [1.1.3] - 2026-08-24
 
 ### Added
